@@ -64,7 +64,7 @@ test('local recognition sends one durable result, not an edit of a ForceReply ac
  
  const id='12345678-1234-1234-1234-123456789abc';db.prepare("INSERT INTO receipts(id,number,created,updated,details) VALUES(?,1,'now','now','{}')").run(id);
  const calls=[],updates=[];let failSend=true;
- const inbox=new TelegramInbox({db,data,publicOrigin:'https://mini.example',updatePurpose:async(target,text)=>updates.push({target,text}),fetcher:async(url,options)=>{
+ const inbox=new TelegramInbox({db,data,publicOrigin:'https://mini.example',updatePurpose:async(target,text)=>updates.push({target,text}),updateDetails:async()=>{throw Object.assign(new Error('“Default” is reserved for receipts without a project. Choose another project name.'),{status:400});},fetcher:async(url,options)=>{
    const method=url.split('/').at(-1),args=JSON.parse(options.body);calls.push({method,args});
    if(method==='editMessageText')return Response.json({ok:false,error_code:400,description:"Bad Request: message can't be edited"},{status:400});
    if(failSend)return Response.json({ok:false,error_code:500},{status:500});
@@ -83,6 +83,7 @@ test('local recognition sends one durable result, not an edit of a ForceReply ac
   assert.equal(db.prepare('SELECT message FROM telegram_notifications').get().message,301);
   assert.equal(db.prepare('SELECT receipt FROM telegram_followups WHERE message=301').get().receipt,id);
   await inbox.handle({message:{message_id:302,chat:{id:42,type:'private'},from:{id:42},text:'Client meeting',reply_to_message:{message_id:301}}});assert.deepEqual(updates,[{target:id,text:'Client meeting'}]);
+  await inbox.handle({message:{message_id:303,chat:{id:42,type:'private'},from:{id:42},text:'project: Default',reply_to_message:{message_id:301}}});assert.match(calls.at(-1).args.text,/^Nothing changed\. .*reserved for receipts without a project/);
   assert.equal(calls.find(c=>c.args.reply_parameters)?.args.reply_parameters.allow_sending_without_reply,true);
  }finally{db.close();rmSync(data,{recursive:true,force:true});}
 });

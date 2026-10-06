@@ -4,6 +4,8 @@ test('project management preserves legacy names, exact filtering, currency total
  const db=openDatabase(':memory:');const projects=createProjects(db),q=createQueries(db);
  try{
   projects.create('Toronto trip');projects.create('Toronto trip extended');assert.throws(()=>projects.create('toronto TRIP'),/exists/);
+  for(const reserved of ['Default',' default ','DEFAULT'])assert.throws(()=>projects.create(reserved),/reserved/);
+  assert.throws(()=>projects.rename('Toronto trip extended','Default'),/reserved/);
   for(const [i,currency,total,deleted] of [[1,'CAD','70',false],[2,'USD','10',false],[3,'CAD','90',true]])db.prepare('INSERT INTO receipts(id,number,created,updated,details,deleted_at) VALUES(?,?,?,?,?,?)').run(String(i),i,'now','now',JSON.stringify({...blankDetails,project:'Toronto trip',merchant:'Cafe',currency,total,date:'2026-10-01',status:'complete'}),deleted?'now':null);
   db.prepare('INSERT INTO receipts(id,number,created,updated,details) VALUES(?,?,?,?,?)').run('4',4,'now','now',JSON.stringify({...blankDetails,project:'Legacy project'}));
   assert.ok(projects.list().some(p=>p.name==='Legacy project'));const trip=projects.list().find(p=>p.name==='Toronto trip');assert.equal(trip.count,2);assert.deepEqual(trip.totals.map(g=>[g.currency,g.total]),[['CAD','70.00'],['USD','10.00']]);

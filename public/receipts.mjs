@@ -1,4 +1,8 @@
 import {categoryNames as categoryLabels} from './categories.mjs';
+// Receipts without a project are shown under this label, so no real project may take the name.
+export const defaultProjectLabel='Default';
+export const reservedProjectMessage=`“${defaultProjectLabel}” is reserved for receipts without a project. Choose another project name.`;
+export const isReservedProjectName=name=>typeof name==='string'&&name.trim().toLowerCase()===defaultProjectLabel.toLowerCase();
 export function receiptLabel(r){
   if(r.title?.trim())return r.title.trim();
   if(r.merchant?.trim())return r.merchant.trim();

@@ -213,7 +213,7 @@ export class TelegramInbox {
         if(structured&&unmatched.length){await this.send(chat,'Nothing changed. Use one field per line, e.g. total: 48.40 or date: 2026-10-03. You can also edit on the receipt page.');return;}
         if(details.category)details.category=({'餐费':'meals','加油':'fuel','油费':'fuel','其他':'other'})[details.category]||details.category;
         try{if(structured&&this.updateDetails)await this.updateDetails(row.receipt,details);else await this.updatePurpose(row.receipt,text.slice(0,2000));}
-        catch(error){if(error.userError||error.status){await this.send(chat,'Nothing changed. Use YYYY-MM-DD for dates and numbers for amounts, or edit on the receipt page.');return;}throw error;}
+        catch(error){if(error.userError||error.status){await this.send(chat,`Nothing changed. ${error.message} You can also edit on the receipt page.`);return;}throw error;}
         if(this.getReceipt)await this.sendDetails(chat,row.receipt);else await this.send(chat,'Changes saved on Mini.');return;
       }
     }

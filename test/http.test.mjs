@@ -131,6 +131,8 @@ test('receipt lifecycle, originals, exports and durable state',async t=>{
   await t.test('project API and project-specific exports include only assigned receipts',async()=>{
     const created=await request('/api/projects',{method:'POST',body:JSON.stringify({name:'Trip export fixture'})});assert.equal(created.status,200);
     const current=(await request('/api/receipts/'+receipt.id)).body;
+    const reserved=await request('/api/receipts/'+receipt.id,{method:'PATCH',body:JSON.stringify({...current,project:'default'})});assert.equal(reserved.status,400);assert.match(reserved.body.error,/reserved/);
+    assert.equal((await request('/api/projects',{method:'POST',body:JSON.stringify({name:'Default'})})).status,400);
     receipt=(await request('/api/receipts/'+receipt.id,{method:'PATCH',body:JSON.stringify({...current,project:'Trip export fixture'})})).body;
     const filtered=await(await fetch(base+'/api/export.csv?project=Trip%20export%20fixture')).text();assert.ok(filtered.includes(receipt.reference));assert.ok(!filtered.includes('RC-00002'));
     assert.equal((await request('/api/projects',{method:'PATCH',body:JSON.stringify({from:'Trip export fixture',name:'Renamed trip'})})).status,200);

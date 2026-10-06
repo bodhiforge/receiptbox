@@ -2,7 +2,7 @@ import {filingFields} from '../public/receipt-policy.mjs';
 import {possibleDuplicate,syncDuplicates,duplicateKey} from './duplicates.mjs';
 import {randomUUID} from 'node:crypto';
 import {blankDetails, categories} from './business.mjs';
-import {receiptName,searchText} from '../public/receipts.mjs';
+import {receiptName,searchText,isReservedProjectName,reservedProjectMessage} from '../public/receipts.mjs';
 import {receiptFingerprint, extractedFields} from './recognition.mjs';
 import {transaction} from './database.mjs';
 import {assessRecognition,policyVersion} from './review-policy.mjs';
@@ -45,6 +45,7 @@ function validate(input) {
   if (out.date && (!/^\d{4}-\d{2}-\d{2}$/.test(out.date) || !Number.isFinite(Date.parse(out.date)) || new Date(out.date).toISOString().slice(0,10) !== out.date)) throw errors(400, 'Enter a valid receipt date.');
   for (const key of ['total','tax','subtotal','gst','hst','pst','qst','tip']) if (out[key] && !/^\d{1,9}(\.\d{1,2})?$/.test(out[key])) throw errors(400, `Enter a non-negative ${key} with up to two decimal places.`);
   if (out.total && out.tax && Number(out.tax)>Number(out.total)) throw errors(400, 'Tax cannot exceed the total.');
+  if (isReservedProjectName(out.project)) throw errors(400, reservedProjectMessage);
   if (out.status === 'complete') {
     const required = filingFields;
     if (required.some(k=>!out[k])) throw errors(400, 'Add date, total and currency before filing.');

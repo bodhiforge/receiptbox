@@ -1,5 +1,6 @@
 import {categoryNames} from './categories.mjs';
-export const groupLabel=(group,key)=>group==='category'?(categoryNames[key]||'Unclassified'):group==='project'?(key||'Default'):key;
+import {defaultProjectLabel} from './receipts.mjs';
+export const groupLabel=(group,key)=>group==='category'?(categoryNames[key]||'Unclassified'):group==='project'?(key||defaultProjectLabel):key;
 export function sortedGroups(groups,group,sort='total',direction='desc'){
  const name=g=>groupLabel(group,g.key);
  return [...groups].sort((a,b)=>(direction==='asc'?1:-1)*(sort==='name'?name(a).localeCompare(name(b)):sort==='count'?a.count-b.count:a.total-b.total)||name(a).localeCompare(name(b)));

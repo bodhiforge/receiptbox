@@ -137,3 +137,7 @@ The web app is restructured around how receipts are read back. A thin top bar re
 ## Default project label (0.4.1)
 
 Receipts without a project are labelled "Default" instead of "No project" in the receipt drawer, Spending breakdowns, the summary table and summary CSV, and the filter chip. Stored data is unchanged: these receipts still have an empty project.
+
+## Reserved Default project name (0.4.2)
+
+"Default" (any case, surrounding spaces ignored) can no longer be used as a project name, because it labels receipts without a project. Creating or renaming a project to it, or setting it on a receipt from the web or a Telegram reply, is rejected with an explanation. Telegram replies that change nothing now state the actual reason instead of a generic date and amount hint.
