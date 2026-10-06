@@ -370,7 +370,7 @@ function reportChart(report,group,currency){
  const temporal=['day','month','year'].includes(group),max=Math.max(1,...report.groups.map(g=>g.total));
  const groupName=g=>group==='category'?(labels[g.key]||'Unclassified'):g.key||'No project';
  const chartRows=report.groups.map((g,i)=>{const name=groupName(g),description=`${name}: ${amount(g.total)} ${currency}, ${g.count} receipts`,share=t.total?(100*g.total/t.total).toFixed(1)+'%':'—';
- if(temporal){const height=180*g.total/max;return `<button class="spending-column" data-spending-row="${i}" data-report-group="${group}" aria-label="${esc(description)}" title="${esc(description)}"><b>${amount(g.total)}</b><svg viewBox="0 0 64 184" preserveAspectRatio="none" aria-hidden="true"><rect class="column-fill" x="21" y="${184-height}" width="22" height="${height}"/></svg><span>${esc(name)}</span><small>${g.count} receipt${g.count===1?'':'s'}</small></button>`;}
+ if(temporal){const height=180*g.total/max;return `<button class="spending-column" data-spending-row="${i}" data-report-group="${group}" aria-label="${esc(description)}" title="${esc(description)}"><b>${amount(g.total)}</b><svg viewBox="0 0 64 184" preserveAspectRatio="xMidYMax meet" aria-hidden="true"><rect class="column-fill" x="21" y="${184-height}" width="22" height="${height}"/></svg><span>${esc(name)}</span><small>${g.count} receipt${g.count===1?'':'s'}</small></button>`;}
  return `<button class="spending-bar-row" data-spending-row="${i}" data-report-group="${group}" aria-label="${esc(description)}"><span class="spending-bar-label"><b>${esc(name)}</b><small>${g.count} receipt${g.count===1?'':'s'} · ${share}</small></span><span class="spending-bar-track"><svg viewBox="0 0 1000 6" preserveAspectRatio="none" aria-hidden="true"><rect class="bar-track" width="1000" height="6"/><rect class="bar-fill" width="${1000*g.total/max}" height="6"/></svg></span><strong>${amount(g.total)}<small>${esc(currency)}</small></strong></button>`;}).join('');
  return report.groups.length?(temporal?`<div class="spending-time-chart"><div class="spending-chart-scale"><span>${amount(max)} ${esc(currency)}</span><span>0</span></div><div class="spending-columns">${chartRows}</div></div><p class="spending-chart-caption">${esc(currency)} · Periods without receipts are omitted.</p>`:`<div class="spending-bars">${chartRows}</div>`):'<p class="muted">No dated receipts match this selection.</p>';
 
@@ -436,7 +436,7 @@ $('#dashboard-receipts').onclick=()=>drillDashboard();
 
 function resetFilters(){for(const [key,id] of Object.entries(filterIds))$('#'+id).value=key==='sort'?'newest':'';}
 function persistFilters(f){
-  const params=new URLSearchParams();for(const [key,value] of Object.entries(f))if(value&&!(key==='sort'&&value==='newest')&&!(key==='status'&&value==='all'))params.set(key,value);
+  const params=new URLSearchParams();for(const [key,value] of Object.entries(f))if(value&&key!=='projectExact'&&!(key==='sort'&&value==='newest')&&!(key==='status'&&value==='all'))params.set(key,value);
   const next=location.pathname+(params.size?'?'+params:'')+location.hash;if(next!==location.pathname+location.search+location.hash)history.replaceState(null,'',next);
 }
 function showPage(next,updateURL=true){

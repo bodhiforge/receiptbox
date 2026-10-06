@@ -125,3 +125,7 @@ Source moved into `src/`, tests into `test/`, helper scripts into `scripts/`, Sw
 ## Symlink-safe command entry points (0.3.36)
 
 `src/backup.mjs`, `src/recovery.mjs`, `src/release.mjs` and `scripts/migration-check.mjs` decide whether they were started as a command by comparing real paths (`src/cli.mjs`). Previously the check compared the symlinked command path with the module's real path, so the daily snapshot LaunchAgent, which runs through the `current` release symlink, exited successfully without taking a snapshot. Snapshots taken by calling a release path directly were unaffected.
+
+## Editorial interface (0.3.37)
+
+The web app moves from layered gray cards to one warm paper surface separated by hairlines. Page titles, headline totals and receipt amounts use the system serif (New York on Apple devices, Georgia elsewhere), so no web fonts are loaded and the content security policy is unchanged. Status tabs and report views are underline tabs, filters are soft pills, the attention notice is a ruled line with a status dot, charts are monochrome with the accent reserved for hover and focus, and dialogs blur the page behind them. The page no longer scrolls behind an open dialog, time charts spread across the full width without widening bars, and the constant `projectExact` flag no longer appears in shareable URLs. No data, recognition or filing behavior changes.
