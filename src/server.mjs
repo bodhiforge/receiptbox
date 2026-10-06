@@ -1,4 +1,5 @@
-import {canManageMembers} from './members.mjs';
+import {canManageMembers,isOwner} from './members.mjs';
+import {createTrash} from './trash.mjs';
 import http from 'node:http';
 import {createProjects} from './projects.mjs';
 import {downloadName,exportFiles,receiptCsv as csv,receiptReport,safeName} from './exports.mjs';
@@ -109,6 +110,12 @@ const handleRequest = cloudflare => async(req,res)=>{
       if(input.action==='retry'){if(!aiEnabled)throw errors(503,'Local recognition is not enabled.');recognition.enqueue(receipt,true);return json(200,get(receipt.id));}
       if(input.action!=='accept')throw errors(400,'Invalid recognition action.');
       return json(200,acceptRecognition(receipt.id,input.job,input.version));
+    }
+    if(url.pathname==='/api/trash'){
+      if(!isOwner({cloudflare,identity,ownerEmail:process.env.RECEIPTBOX_OWNER_EMAIL}))throw errors(403,'Only the owner can empty Trash.');
+      const trash=createTrash({db,data});
+      if(req.method==='GET')return json(200,trash.summary());
+      if(req.method==='POST'){const input=JSON.parse((await body(req,1024)).toString()),actor=identity?.email||(allowedLogin?req.headers['tailscale-user-login']:'')||'local';return json(200,await trash.empty({count:input.count,latest:input.latest,actor}));}
     }
     if(url.pathname==='/api/members'){
       if(!canManageMembers({cloudflare,identity,ownerEmail:process.env.RECEIPTBOX_OWNER_EMAIL}))throw errors(403,'Only the owner can manage Telegram members.');

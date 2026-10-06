@@ -1,0 +1,42 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {mkdtemp,mkdir,writeFile,readFile,rm,access} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {openDatabase} from '../src/database.mjs';
+import {createReceiptService} from '../src/receipts.mjs';
+import {RecognitionQueue} from '../src/recognition.mjs';
+import {createTrash} from '../src/trash.mjs';
+
+const pdf=index=>Buffer.from(`%PDF-1.4\nFictional trash fixture ${index}\n%%EOF\n`);
+const exists=path=>access(path).then(()=>true,()=>false);
+
+test('emptying Trash purges only what the user confirmed and keeps busy and later receipts',async t=>{
+  const data=await mkdtemp(join(tmpdir(),'receiptbox-trash-'));const db=openDatabase(join(data,'receipts.sqlite'));
+  t.after(async()=>{db.close();await rm(data,{recursive:true,force:true});});
+  let service;const queue=new RecognitionQueue({db,getReceipt:id=>service.get(id),enabled:false,runModel:async()=>{throw Error('unused');}});
+  service=createReceiptService({db,data,recognition:queue});
+  const add=async index=>{const result=await service.ingest({bytes:pdf(index)});return service.get((result.receipt||result).id);};
+  const kept=await add(1),purged=await add(2),busy=await add(3),later=await add(4);
+  db.prepare("INSERT INTO telegram_receipts VALUES('bot','chat',10,?,11,'document')").run(purged.id);
+  db.prepare("INSERT INTO receipt_ai(receipt,fingerprint,status,created,updated) VALUES(?,'busy','queued','now','now')").run(busy.id);
+  const original=join(data,'originals',purged.files[0].hash),preview=join(data,'previews','v1',purged.files[0].hash);
+  await mkdir(preview,{recursive:true});await writeFile(join(preview,'0.jpg'),'fixture');
+  service.setDeleted(purged.id,purged.version,true);service.setDeleted(busy.id,busy.version,true);
+  const trash=createTrash({db,data}),shown=trash.summary();
+  assert.deepEqual([shown.count,shown.busy],[2,1]);
+  await assert.rejects(()=>trash.empty({count:1,latest:shown.latest,actor:'owner'}),/Trash changed/);
+  assert.ok(service.get(purged.id));
+  await new Promise(resolve=>setTimeout(resolve,5));
+  service.setDeleted(later.id,later.version,true);
+  const result=await trash.empty({count:shown.count,latest:shown.latest,actor:'owner'});
+  assert.deepEqual([result.purged,result.skipped,result.count],[1,1,2]);
+  assert.equal(db.prepare('SELECT count(*) n FROM receipts WHERE id=?').get(purged.id).n,0);
+  for(const [table,column] of [['events','receipt_id'],['telegram_receipts','receipt'],['receipt_search','id'],['expense_documents','expense_id']])assert.equal(db.prepare(`SELECT count(*) n FROM ${table} WHERE ${column}=?`).get(purged.id).n,0,table);
+  assert.equal(await exists(original),false);assert.equal(await exists(preview),false);
+  assert.ok(service.get(kept.id)&&!service.get(kept.id).deleted_at);
+  assert.ok(service.get(busy.id).deleted_at);assert.ok(service.get(later.id).deleted_at);
+  assert.ok(await exists(join(data,'originals',kept.files[0].hash)));
+  const log=(await readFile(join(data,'trash-purges.jsonl'),'utf8')).trim().split('\n').map(line=>JSON.parse(line));
+  assert.deepEqual(log.map(entry=>[entry.reference,entry.actor]),[[purged.reference,'owner']]);
+});

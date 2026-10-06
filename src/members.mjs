@@ -12,4 +12,5 @@ export class Members {
  remove(user){if(String(user)===this.c?.owner)throw fail('The owner cannot be removed.');this.db.prepare('UPDATE bot_members SET removed=? WHERE bot=? AND user=?').run(this.clock(),this.c.bot,String(user));}
  revoke(id){this.db.prepare('UPDATE bot_invites SET revoked=? WHERE bot=? AND hash=?').run(this.clock(),this.c.bot,String(id));}
 }
-export function canManageMembers({cloudflare,identity,ownerEmail}){return !cloudflare||Boolean(ownerEmail&&identity?.email?.toLowerCase()===ownerEmail.toLowerCase());}
+export function isOwner({cloudflare,identity,ownerEmail}){return !cloudflare||Boolean(ownerEmail&&identity?.email?.toLowerCase()===ownerEmail.toLowerCase());}
+export const canManageMembers=isOwner;

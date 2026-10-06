@@ -54,7 +54,8 @@ async function renderHome(){
  const processing=facets.processing||0;
  $('#inbox-feedback').hidden=view==='trash'||!processing;
  $('#inbox-feedback').textContent=processing?`${processing} receipt${processing===1?' is':'s are'} being read. You can leave this page.`:'';
- if(view==='trash'){++homeSequence;return;}
+ $('#trash-bar').hidden=view!=='trash';
+ if(view==='trash'){++homeSequence;refreshTrashBar();return;}
  const sequence=++homeSequence,now=new Date(),start=new Date(now.getFullYear(),now.getMonth()-11,1);
  try{
   const [trend,attention]=await Promise.all([
@@ -592,3 +593,29 @@ $('#preview-dialog').addEventListener('keydown',event=>{if(event.target.matches(
 $('#search').addEventListener('input',()=>{if(page!=='receipts')showPage('receipts');});
 window.addEventListener('keydown',event=>{if((event.metaKey||event.ctrlKey)&&event.key.toLowerCase()==='k'&&!document.querySelector('dialog[open]')){event.preventDefault();$('#search').focus();$('#search').select();}});
 window.addEventListener('scroll',()=>$('#topbar').classList.toggle('scrolled',scrollY>4),{passive:true});
+
+// Emptying Trash is owner-only and confirms the exact count and newest deletion it showed,
+// so receipts trashed after the dialog opened are never purged.
+let trashSummary=null;
+async function refreshTrashBar(){
+  try{trashSummary=await api('/api/trash');}catch{trashSummary=null;$('#trash-bar').hidden=true;return;}
+  if(view!=='trash')return;
+  $('#trash-bar').hidden=!trashSummary.count;
+  $('#trash-summary').textContent=`${trashSummary.count} receipt${trashSummary.count===1?'':'s'} in Trash. Restore one by opening it, or empty Trash to delete them permanently.`;
+}
+$('#empty-trash-open').onclick=async()=>{
+  await refreshTrashBar();if(!trashSummary?.count)return;
+  const {count,busy}=trashSummary;
+  $('#empty-trash-text').textContent=`${count} receipt${count===1?'':'s'} and ${count===1?'its':'their'} original files will be deleted permanently, including history and Telegram links.`+(busy?` ${busy} still being read will stay in Trash.`:'');
+  $('#empty-trash-error').hidden=true;$('#empty-trash-dialog').showModal();
+};
+for(const id of ['empty-trash-close','empty-trash-cancel'])$('#'+id).onclick=()=>$('#empty-trash-dialog').close();
+$('#empty-trash-confirm').onclick=async()=>{
+  $('#empty-trash-confirm').disabled=true;
+  try{
+    const result=await api('/api/trash',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({count:trashSummary.count,latest:trashSummary.latest})});
+    $('#empty-trash-dialog').close();notify(`Deleted ${result.purged} receipt${result.purged===1?'':'s'} permanently.`+(result.skipped?` ${result.skipped} still being read stayed in Trash.`:''));
+    await refresh();await refreshTrashBar();
+  }catch(error){$('#empty-trash-error').textContent=error.message;$('#empty-trash-error').hidden=false;}
+  finally{$('#empty-trash-confirm').disabled=false;}
+};

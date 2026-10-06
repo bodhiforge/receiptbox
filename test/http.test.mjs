@@ -132,6 +132,10 @@ test('receipt lifecycle, originals, exports and durable state',async t=>{
     assert.deepEqual(await queue(),{failed:1,queued:1,ready:1});
     db.prepare("DELETE FROM receipt_ai WHERE fingerprint LIKE 'health-%'").run();db.close();
   });
+  await t.test('trash summary and empty require the confirmed count',async()=>{
+    const summary=(await request('/api/trash')).body;assert.equal(typeof summary.count,'number');
+    assert.equal((await request('/api/trash',{method:'POST',body:JSON.stringify({count:summary.count+1,latest:summary.latest||'2000-01-01T00:00:00.000Z'})})).status,409);
+  });
   await t.test('project API and project-specific exports include only assigned receipts',async()=>{
     const created=await request('/api/projects',{method:'POST',body:JSON.stringify({name:'Trip export fixture'})});assert.equal(created.status,200);
     const current=(await request('/api/receipts/'+receipt.id)).body;

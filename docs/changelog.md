@@ -149,3 +149,7 @@ The folded-receipt fox replaces the generic receipt icon as the brand mark, brow
 ## IBM Plex fonts (0.4.4)
 
 The Ledger theme's IBM Plex Sans (variable, 400–600) and IBM Plex Mono (400, 500) now ship with the app as Latin-subset WOFF2 files served from the same origin, so the content security policy is unchanged and no third-party font host is contacted. Characters outside the Latin subset fall back to system fonts. The SIL Open Font License travels with the files as `public/IBM-Plex-OFL.txt`.
+
+## Empty Trash (0.4.5)
+
+The Trash view has an owner-only "Empty Trash" action. The confirmation names how many receipts will be deleted; the request carries that count and the newest deletion time shown, so receipts trashed afterwards are never included and a changed Trash asks for review again. Purging removes each receipt with its history, recognition jobs, notification queue entries, Telegram mappings, search entry and file links; originals and their previews are deleted from disk only when no remaining receipt uses them. Receipts still being read stay in Trash. Kept receipts that pointed at a purged one as a possible duplicate lose the pointer with an audit event. Each purge appends a short record (reference, merchant, date, amount, file hashes, actor) to `data/trash-purges.jsonl`. Existing recovery snapshots are not touched.
