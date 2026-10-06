@@ -2,8 +2,8 @@ import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {mkdir,stat,readFile} from 'node:fs/promises';
 import {resolve} from 'node:path';
-import {fileURLToPath} from 'node:url';
 import {verifySnapshot} from './backup.mjs';
+import {isEntryPoint} from './cli.mjs';
 
 const execute=promisify(execFile);
 export function recovery(config) {
@@ -39,7 +39,7 @@ export function recovery(config) {
   };
 }
 
-if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
+if(isEntryPoint(import.meta.url)){
   try{
     const [action,configPath,...args]=process.argv.slice(2);
     if(!['init','backup','check','restore'].includes(action)||!configPath)throw new Error('Usage: node recovery.mjs <init|backup|check|restore> <config.json> [snapshot-folder | snapshot-id restore-directory]');

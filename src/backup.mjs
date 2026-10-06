@@ -5,7 +5,7 @@ import {mkdir,mkdtemp,copyFile,readFile,writeFile,rename,rm} from 'node:fs/promi
 import {createHash} from 'node:crypto';
 import {join,resolve} from 'node:path';
 import {tmpdir} from 'node:os';
-import {fileURLToPath} from 'node:url';
+import {isEntryPoint} from './cli.mjs';
 process.umask(0o077);
 export async function verifySnapshot(folder){
   const restore=await mkdtemp(join(tmpdir(),'receiptbox-restore-'));
@@ -37,7 +37,7 @@ export async function snapshot(data){
     return {created,...counts,verified:true,sameDevice:true};
   }catch(error){await rm(stage,{recursive:true,force:true});throw error;}
 }
-if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
+if(isEntryPoint(import.meta.url)){
   try{const data=resolve(process.env.RECEIPTBOX_DATA||'data');console.log(JSON.stringify(await snapshot(data)));}
   catch{console.error('Recovery snapshot failed. Existing originals and previous snapshots are unchanged.');process.exitCode=1;}
 }

@@ -3,11 +3,11 @@
 import {DatabaseSync,backup} from 'node:sqlite';
 import {mkdir,copyFile} from 'node:fs/promises';
 import {constants} from 'node:fs';
-import {join,resolve} from 'node:path';
-import {fileURLToPath} from 'node:url';
+import {join} from 'node:path';
 import assert from 'node:assert/strict';
 import {migrate} from '../src/database.mjs';
 import {verifySnapshot} from '../src/backup.mjs';
+import {isEntryPoint} from '../src/cli.mjs';
 
 export async function checkMigration(source,target) {
   await mkdir(target,{mode:0o700});
@@ -24,7 +24,7 @@ export async function checkMigration(source,target) {
     return {schemaVersion:copy.prepare('PRAGMA user_version').get().user_version,preserved:true,...await verifySnapshot(target)};
   }finally{copy.close();}
 }
-if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
+if(isEntryPoint(import.meta.url)){
   try{console.log(JSON.stringify(await checkMigration(...process.argv.slice(2))));}
   catch(error){console.error(error.message);process.exitCode=1;}
 }

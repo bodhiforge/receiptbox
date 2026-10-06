@@ -121,3 +121,7 @@ Model-extracted subtotal requires an explicit subtotal or pre-tax label. Current
 ## Repository layout (0.3.35)
 
 Source moved into `src/`, tests into `test/`, helper scripts into `scripts/`, Swift helpers into `native/` and design notes into `docs/`. Releases now contain runtime code only. **Existing installations must update their LaunchAgents** to run `current/src/server.mjs`, `current/src/worker.mjs` and `current/src/backup.mjs` when switching to a release built from this layout. No data or schema changes.
+
+## Symlink-safe command entry points (0.3.36)
+
+`src/backup.mjs`, `src/recovery.mjs`, `src/release.mjs` and `scripts/migration-check.mjs` decide whether they were started as a command by comparing real paths (`src/cli.mjs`). Previously the check compared the symlinked command path with the module's real path, so the daily snapshot LaunchAgent, which runs through the `current` release symlink, exited successfully without taking a snapshot. Snapshots taken by calling a release path directly were unaffected.

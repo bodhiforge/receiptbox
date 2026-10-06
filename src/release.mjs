@@ -1,7 +1,7 @@
 import {readdir,readFile,writeFile,mkdir,copyFile,rename,rm,stat} from 'node:fs/promises';
 import {createHash,randomUUID} from 'node:crypto';
-import {join,resolve} from 'node:path';
-import {fileURLToPath} from 'node:url';
+import {join} from 'node:path';
+import {isEntryPoint} from './cli.mjs';
 
 const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
 export async function verifyRelease(directory) {
@@ -38,7 +38,7 @@ export async function buildRelease(source,releases) {
     return {id,directory:destination};
   }catch(error){await rm(stage,{recursive:true,force:true});throw error;}
 }
-if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
+if(isEntryPoint(import.meta.url)){
   try{
     const [action,...args]=process.argv.slice(2);
     if(!['build','verify'].includes(action))throw new Error('Usage: node release.mjs build <source> <release-directory> | verify <release>');
