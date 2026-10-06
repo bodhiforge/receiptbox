@@ -42,17 +42,53 @@ async function refresh() {
   } catch(error){if(sequence!==requestSequence)return;$('#load-error').hidden=false;$('#load-error').textContent=`Could not load your records. ${error.message}`;}
 }
 let homeSequence=0;
+const money=value=>Number(value).toLocaleString('en-CA',{minimumFractionDigits:2,maximumFractionDigits:2});
+const isoDate=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+const monthKey=d=>isoDate(d).slice(0,7);
+const monthTitle=key=>new Date(key+'-01T12:00').toLocaleString('en-CA',{month:'long',year:'numeric'});
+// The home hero and the review list are home-only context; Trash and other tabs keep just the ledger.
 async function renderHome(){
- $('#inbox-feedback').hidden=view==='trash';$('#upload-zone').hidden=view==='trash';
+ const home=view==='all';
+ $('#home-hero').hidden=view==='trash';
+ if(!home)$('#review-section').hidden=true;
+ const processing=facets.processing||0;
+ $('#inbox-feedback').hidden=view==='trash'||!processing;
+ $('#inbox-feedback').textContent=processing?`${processing} receipt${processing===1?' is':'s are'} being read. You can leave this page.`:'';
  if(view==='trash'){++homeSequence;return;}
- const sequence=++homeSequence,now=new Date(),year=String(now.getFullYear()),month=String(now.getMonth()+1).padStart(2,'0');
- const pending=facets.pending||0,processing=facets.processing||0;
- $('#inbox-feedback').hidden=!pending&&!processing;
- $('#inbox-feedback').className='inbox-feedback '+(pending?'has-attention':'');
- $('#inbox-feedback').innerHTML=pending?`<span><b>${pending} receipt${pending===1?'':'s'} need${pending===1?'s':''} attention.</b> </span><button type="button" id="open-exceptions">Resolve details &rarr;</button>`:`<span>${processing} receipt${processing===1?' is':'s are'} being organized. You can leave this page.</span>`;
- if($('#open-exceptions'))$('#open-exceptions').onclick=()=>document.querySelector('[data-view="pending"]').click();
- 
-
+ const sequence=++homeSequence,now=new Date(),start=new Date(now.getFullYear(),now.getMonth()-11,1);
+ try{
+  const [trend,attention]=await Promise.all([
+   api('/api/dashboard?'+new URLSearchParams({mode:'range',currency:'CAD',group:'month',from:isoDate(start),to:isoDate(now)})),
+   home&&facets.pending?api('/api/receipts?'+new URLSearchParams({status:'pending',sort:'newest',limit:'5',offset:'0'})):null
+  ]);
+  if(sequence!==homeSequence)return;
+  const keys=Array.from({length:12},(_,i)=>monthKey(new Date(now.getFullYear(),now.getMonth()-11+i,1)));
+  const byKey=new Map(trend.groups.map(g=>[g.key,g])),series=keys.map(k=>byKey.get(k)?.total||0),max=Math.max(1,...series);
+  const current=byKey.get(keys[11]),previous=byKey.get(keys[10]),[whole,cents]=reportAmount(current?.total||0).split('.');
+  const count=current?.count||0,difference=count-(previous?.count||0);
+  $('#hero-month').textContent=now.toLocaleString('en-CA',{month:'long',year:'numeric'});
+  $('#hero-total').innerHTML=`${whole}<span>.${cents} CAD</span>`;
+  $('#hero-note').textContent=`${count} receipt${count===1?'':'s'} this month`+(previous?` · ${difference===0?'same as last month':`${Math.abs(difference)} ${difference>0?'more':'fewer'} than last month`}`:'');
+  // The CSP forbids style attributes in markup; CSSOM assignment is allowed.
+  $('#hero-spark').replaceChildren(...series.map((v,i)=>{const bar=document.createElement('b');bar.className=i===11?'now':'';bar.style.height=Math.max(3,Math.round(v/max*56))+'px';bar.title=`${new Date(keys[i]+'-01T12:00').toLocaleString('en-CA',{month:'long'})}: ${reportAmount(v)} CAD`;return bar;}));
+  if(home)renderReview(attention);
+ }catch{if(sequence===homeSequence){$('#hero-total').textContent='—';$('#hero-note').textContent='Monthly totals are unavailable right now.';}}
+}
+// List items omit recognition evidence, so the reason comes from the filing fields the receipt still lacks.
+function renderReview(result){
+ const items=result?.items||[];
+ $('#review-section').hidden=!items.length;
+ if(!items.length)return;
+ const total=facets.pending||items.length;
+ $('#review-count').textContent=`${total} of ${facets.total} receipt${facets.total===1?'':'s'}`;
+ $('#review-list').innerHTML=items.map(r=>{
+  const missing=filingFields.filter(key=>!r[key]);
+  const reason=r.duplicatePending?'Looks like a receipt you already have':missing.length?`Missing ${missing.map(key=>(fieldLabels[key]||key).toLowerCase()).join(', ')}`:'A detail needs checking';
+  const action=r.duplicatePending?'Compare':missing.length===1?`Add ${(fieldLabels[missing[0]]||missing[0]).toLowerCase()}`:'Review';
+  return `<div class="review-item" data-review="${r.id}"><span class="review-mark" aria-hidden="true"></span><div><b>${esc(receiptLabel(r))}</b><small>${esc(reason)}</small></div><button type="button" class="button primary small" data-review="${r.id}">${esc(action)}</button></div>`;
+ }).join('')+(total>items.length?`<button type="button" class="text-button review-more" id="review-all">Show all ${total} →</button>`:'');
+ document.querySelectorAll('.review-item').forEach(item=>item.onclick=()=>openReceipt(item.dataset.review));
+ if($('#review-all'))$('#review-all').onclick=()=>document.querySelector('[data-view="pending"]').click();
 }
 function render(){clearTimeout(refreshTimer);refreshTimer=setTimeout(()=>refresh(),150);}
 function paintList() {
@@ -82,12 +118,24 @@ function paintList() {
     $('#receipts').innerHTML=`<div class="empty-state"><div class="empty-icon" aria-hidden="true">▤</div><h3>${view==='trash'?'Trash is empty.':empty?'A clear place for every receipt.':view==='pending'&&!active.length?'You’re all caught up.':'No receipts match this view.'}</h3><p>${view==='trash'?'Deleted receipts appear here and can be restored.':empty?'Save your first receipt above. Its original and upload record will appear right here.':'Change your filters or add a new receipt.'}</p></div>`;
     return;
   }
-  $('#receipts').innerHTML=filtered.map(r=>{
-    const file=r.files[0]||{mime:'',id:''}, preview=file.mime.startsWith('image/')&&file.mime!=='image/heic';
+  // Receipt-date order reads as a ledger grouped by month; other orders stay a flat list.
+  const byMonth=f.sort==='date';
+  const groups=byMonth?filtered.reduce((all,r)=>{const key=r.date?r.date.slice(0,7):'undated',last=all[all.length-1];if(last?.key===key)last.rows.push(r);else all.push({key,rows:[r]});return all;},[]):[{key:'',rows:filtered}];
+  const row=r=>{
     const state=r.deleted_at?['trash','In Trash']:r.processing?['processing','Reading…']:r.duplicatePending?['attention','Possible duplicate']:r.status!=='complete'?['attention',labels[r.status]]:null;
-    return `<button class="receipt-row" data-id="${r.id}"><span class="receipt-thumb" aria-hidden="true">${preview?`<img src="/files/${file.id}" alt="" loading="lazy">`:file.mime==='application/pdf'?'PDF':'IMAGE'}</span><span class="receipt-info"><span class="receipt-title">${esc(receiptLabel(r))}</span><span class="receipt-meta">${r.processing?'Reading the receipt...':`${esc(r.date||'Date needed')} · ${esc(labels[r.category]||'Unclassified')}`}${r.project?` · ${esc(r.project)}`:''}</span></span><span class="receipt-right"><span class="amount">${r.total?Number(r.total).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}):'—'}<small>${esc(r.currency)}</small></span>${state?`<span class="badge ${state[0]}">${esc(state[1])}</span>`:''}</span></button>`;
+    const day=r.date?new Date(r.date+'T12:00'):null;
+    const dayMark=day?`${day.getDate()}<small>${day.toLocaleString('en-CA',byMonth?{weekday:'short'}:{month:'short'})}</small>`:'<small>No date</small>';
+    const meta=r.processing?'Reading the receipt…':esc(labels[r.category]||'Unclassified');
+    return `<button class="ledger-row" data-id="${r.id}"><span class="day">${dayMark}</span><span class="who"><b>${esc(receiptLabel(r))}</b><span>${meta}${r.project?`<span class="tag">${esc(r.project)}</span>`:''}</span></span><span class="right"><span class="amount">${r.total?money(r.total):'—'}<small>${esc(r.currency)}</small></span>${state?`<span class="badge ${state[0]}">${esc(state[1])}</span>`:''}</span></button>`;
+  };
+  $('#receipts').innerHTML=groups.map((group,index)=>{
+    if(!group.key)return group.rows.map(row).join('');
+    const sums=group.rows.filter(r=>r.total&&r.currency&&!r.duplicatePending&&!r.deleted_at).reduce((all,r)=>({...all,[r.currency]:(all[r.currency]||0)+Number(r.total)}),{});
+    const continues=index===groups.length-1&&listPage.hasMore;
+    const totals=Object.entries(sums).map(([currency,sum])=>`<b>${money(sum)}</b> ${esc(currency)}`).join(' ·');
+    return `<section class="month"><div class="month-head"><h3>${group.key==='undated'?'No date yet':monthTitle(group.key)}</h3><span>${group.rows.length} receipt${group.rows.length===1?'':'s'}${continues?' on this page':''}${totals}</span></div>${group.rows.map(row).join('')}</section>`;
   }).join('');
-  document.querySelectorAll('.receipt-row').forEach(button=>button.onclick=()=>openReceipt(button.dataset.id));
+  document.querySelectorAll('.ledger-row').forEach(button=>button.onclick=()=>openReceipt(button.dataset.id));
 }
 function syncReceiptTabs(){
  document.querySelectorAll('[data-view]').forEach(button=>{const active=button.dataset.view===view;button.classList.toggle('active',active);button.setAttribute('aria-selected',String(active));button.tabIndex=active||(view==='trash'&&button.dataset.view==='all')?0:-1;});
@@ -108,22 +156,26 @@ for(const id of ['date-from-filter','date-to-filter'])$('#'+id).addEventListener
 for(const id of ['year-filter','month-filter'])$('#'+id).addEventListener('change',()=>{$('#date-from-filter').value='';$('#date-to-filter').value='';render();});
 $('#page-previous').onclick=()=>{offset=Math.max(0,offset-50);refresh();};
 $('#page-next').onclick=()=>{if(listPage.hasMore){offset+=50;refresh();}};
-$('#camera-button').onclick=()=>$('#camera-input').click();$('#browse-button').onclick=()=>$('#files-input').click();
+$('#browse-button').onclick=()=>$('#files-input').click();
 function choose(files) {
   const chosen=Array.from(files);if(!chosen.length)return;
   jobs.push(...chosen.map(file=>({file,state:'queued',title:''})));processQueue();
 }
 
-for(const id of ['camera-input','files-input']) $('#'+id).onchange=event=>{choose(event.target.files);event.target.value='';};
+$('#files-input').onchange=event=>{if(page!=='receipts')showPage('receipts');choose(event.target.files);event.target.value='';};
 $('#upload-close').onclick=()=>$('#upload-dialog').close();
 $('#upload-dialog').addEventListener('close',()=>{if(uploadUrl){URL.revokeObjectURL(uploadUrl);uploadUrl=null;}});
 $('#upload-reselect').onclick=()=>{$('#upload-dialog').close();$('#files-input').click();};
 $('#upload-save').onclick=()=>{
   jobs.push(...uploadFiles.map(file=>({file,state:'queued',title:uploadFiles.length===1?$('#upload-name').value.trim():''})));$('#upload-dialog').close();processQueue();
 };
-for(const type of ['dragenter','dragover']) $('#upload-zone').addEventListener(type,event=>{event.preventDefault();$('#upload-zone').classList.add('dragging');});
-$('#upload-zone').addEventListener('dragleave',()=>$('#upload-zone').classList.remove('dragging'));
-$('#upload-zone').addEventListener('drop',event=>{event.preventDefault();$('#upload-zone').classList.remove('dragging');choose(event.dataTransfer.files);});
+// The whole page is a drop target. Drops onto an open dialog are ignored so a stray file never becomes a new receipt mid-edit.
+let dragDepth=0;
+const carriesFiles=event=>[...(event.dataTransfer?.types||[])].includes('Files');
+window.addEventListener('dragenter',event=>{if(!carriesFiles(event))return;event.preventDefault();dragDepth++;if(!document.querySelector('dialog[open]'))document.body.classList.add('dropping');});
+window.addEventListener('dragover',event=>{if(carriesFiles(event))event.preventDefault();});
+window.addEventListener('dragleave',()=>{dragDepth=Math.max(0,dragDepth-1);if(!dragDepth)document.body.classList.remove('dropping');});
+window.addEventListener('drop',event=>{if(!carriesFiles(event))return;event.preventDefault();dragDepth=0;document.body.classList.remove('dropping');if(document.querySelector('dialog[open]'))return;if(page!=='receipts')showPage('receipts');choose(event.dataTransfer.files);});
 function renderQueue() {
   $('#queue').hidden=!jobs.length;
   $('#queue').innerHTML=jobs.map((j,i)=>`<div class="queue-row"><span class="queue-name">${esc(j.displayName||j.title||j.file.name)}</span><span class="queue-state ${j.state}">${j.state==='queued'?'Waiting':j.state==='uploading'?'Saving original...':j.state==='saved'?`✓ Saved · <button class="text-button" data-job="${i}">View</button>`:j.state==='duplicate'?`Already saved · <button class="text-button" data-job="${i}">View</button>`:`${esc(j.error)} <button class="text-button" data-retry="${i}">Retry</button>`}</span></div>`).join('')+(jobs.some(j=>['saved','duplicate'].includes(j.state))?'<button class="text-button queue-clear" id="clear-finished">Dismiss saved uploads</button>':'');
@@ -178,7 +230,7 @@ async function openReceipt(id) {
   initialForm=JSON.stringify(formValues());categoryFields();$('#detail-error').hidden=true;
   renderOriginal();renderHistory();renderRecognition();
   const core=['merchant','date','total','tax','currency','category'];
-  $('#saved-field-summary').innerHTML=`<span class="receipt-total"><small>Total</small><b>${esc(selected.currency||'')} ${esc(selected.total?Number(selected.total).toLocaleString('en-CA',{minimumFractionDigits:2,maximumFractionDigits:2}):'Not yet available')}</b></span>`+['date','category','tax'].filter(k=>selected[k]).map(k=>`<span><small>${esc(fieldLabels[k])}</small><b>${esc(k==='category'?labels[selected[k]]:selected[k])}</b></span>`).join('');
+  $('#saved-field-summary').innerHTML=selected.total?`<b>${money(selected.total)}<small>${esc(selected.currency||'')}</small></b>`:'<span class="muted">Total not available yet</span>';
   $('#receipt-fields').open=filingFields.some(key=>!selected[key]);
   $('#business-fields').open=false;
   $('#mark-complete').hidden=true;
@@ -365,20 +417,30 @@ $('#fiscal-apply').onclick=async()=>{try{company=await api('/api/company');const
 function spendingRange(){const period=$('#spending-period').value;return period==='all'?{from:'',to:''}:period==='custom'?{from:$('#spending-from').value,to:$('#spending-to').value}:calendarRange(period);}
 let reportView='overview',reportSort='total',reportDirection='desc',reportSnapshot=null;
 const reportAmount=n=>(n/100).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
-function reportChart(report,group,currency){
+function fillMonths(groups,from,to){
+ const keys=groups.map(g=>g.key).sort();
+ const start=(from||keys[0]||'').slice(0,7),end=(to||keys[keys.length-1]||'').slice(0,7);
+ if(!start||!end||start>end)return groups;
+ const byKey=new Map(groups.map(g=>[g.key,g])),filled=[];
+ let [year,month]=start.split('-').map(Number);
+ for(let guard=0;guard<240;guard++){const key=`${year}-${String(month).padStart(2,'0')}`;filled.push(byKey.get(key)||{key,total:0,count:0,tax:0});if(key>=end)break;month++;if(month>12){month=1;year++;}}
+ return filled;
+}
+function reportChart(report,group,currency,range={}){
  const t=report.totals,amount=reportAmount;
- const temporal=['day','month','year'].includes(group),max=Math.max(1,...report.groups.map(g=>g.total));
- const groupName=g=>group==='category'?(labels[g.key]||'Unclassified'):g.key||'No project';
- const chartRows=report.groups.map((g,i)=>{const name=groupName(g),description=`${name}: ${amount(g.total)} ${currency}, ${g.count} receipts`,share=t.total?(100*g.total/t.total).toFixed(1)+'%':'—';
- if(temporal){const height=180*g.total/max;return `<button class="spending-column" data-spending-row="${i}" data-report-group="${group}" aria-label="${esc(description)}" title="${esc(description)}"><b>${amount(g.total)}</b><svg viewBox="0 0 64 184" preserveAspectRatio="xMidYMax meet" aria-hidden="true"><rect class="column-fill" x="21" y="${184-height}" width="22" height="${height}"/></svg><span>${esc(name)}</span><small>${g.count} receipt${g.count===1?'':'s'}</small></button>`;}
- return `<button class="spending-bar-row" data-spending-row="${i}" data-report-group="${group}" aria-label="${esc(description)}"><span class="spending-bar-label"><b>${esc(name)}</b><small>${g.count} receipt${g.count===1?'':'s'} · ${share}</small></span><span class="spending-bar-track"><svg viewBox="0 0 1000 6" preserveAspectRatio="none" aria-hidden="true"><rect class="bar-track" width="1000" height="6"/><rect class="bar-fill" width="${1000*g.total/max}" height="6"/></svg></span><strong>${amount(g.total)}<small>${esc(currency)}</small></strong></button>`;}).join('');
- return report.groups.length?(temporal?`<div class="spending-time-chart"><div class="spending-chart-scale"><span>${amount(max)} ${esc(currency)}</span><span>0</span></div><div class="spending-columns">${chartRows}</div></div><p class="spending-chart-caption">${esc(currency)} · Periods without receipts are omitted.</p>`:`<div class="spending-bars">${chartRows}</div>`):'<p class="muted">No dated receipts match this selection.</p>';
+ const temporal=['day','month','year'].includes(group),groups=group==='month'?fillMonths(report.groups,range.from,range.to):report.groups,max=Math.max(1,...groups.map(g=>g.total));
+ const spansYears=new Set(groups.map(g=>String(g.key).slice(0,4))).size>1;
+ const groupName=g=>group==='category'?(labels[g.key]||'Unclassified'):group==='project'?g.key||'No project':group==='month'?new Date(g.key+'-01T12:00').toLocaleString('en-CA',spansYears?{month:'short',year:'2-digit'}:{month:'short'}):g.key;
+ const chartRows=groups.map((g,i)=>{const name=groupName(g),description=`${name}: ${amount(g.total)} ${currency}, ${g.count} receipts`,share=t.total?(100*g.total/t.total).toFixed(1)+'%':'—';
+ if(temporal){const height=Math.max(g.total?2:1,180*g.total/max);return `<button class="spending-column${g.total?'':' is-zero'}" data-spending-key="${esc(g.key)}" data-report-group="${group}" aria-label="${esc(description)}" title="${esc(description)}"><b>${g.total?amount(g.total):''}</b><svg viewBox="0 0 64 184" preserveAspectRatio="xMidYMax meet" aria-hidden="true"><rect class="column-fill" x="24" y="${184-height}" width="16" height="${height}" rx="2"/></svg><span>${esc(name)}</span><small>${g.count?`${g.count} receipt${g.count===1?'':'s'}`:'—'}</small></button>`;}
+ return `<button class="spending-bar-row" data-spending-key="${esc(g.key??'')}" data-report-group="${group}" aria-label="${esc(description)}"><span class="spending-bar-label"><b>${esc(name)}</b><small>${g.count} receipt${g.count===1?'':'s'} · ${share}</small></span><span class="spending-bar-track"><svg viewBox="0 0 1000 4" preserveAspectRatio="none" aria-hidden="true"><rect class="bar-track" width="1000" height="4"/><rect class="bar-fill" width="${1000*g.total/max}" height="4"/></svg></span><strong>${amount(g.total)}<small>${esc(currency)}</small></strong></button>`;}).join('');
+ return report.groups.length?(temporal?`<div class="spending-time-chart"><div class="spending-chart-scale"><span>${amount(max)} ${esc(currency)}</span><span>0</span></div><div class="spending-columns">${chartRows}</div></div><p class="spending-chart-caption">${esc(currency)} · ${group==='month'?'Months without receipts show as zero.':'Periods without receipts are omitted.'}</p>`:`<div class="spending-bars">${chartRows}</div>`):'<p class="muted">No dated receipts match this selection.</p>';
 
 }
 function reportTable(report,group,currency){
  const rows=sortedGroups(report.groups,group,reportSort,reportDirection);
  const heading=(key,title)=>`<th scope="col" aria-sort="${key===reportSort?(reportDirection==='asc'?'ascending':'descending'):'none'}"><button data-report-sort="${key}">${esc(title)} ${key===reportSort?(reportDirection==='asc'?'↑':'↓'):'↕'}</button></th>`;
- return `<div class="report-table-wrap"><table class="report-table"><caption class="sr-only">Expense summary in ${esc(currency)}</caption><thead><tr>${heading('name',group==='category'?'Category':group==='project'?'Project':'Period')}${heading('count','Receipts')}${heading('total',`Total (${currency})`)}<th>Tax</th><th>Share</th></tr></thead><tbody>${rows.map(g=>`<tr><td><button class="text-button" data-spending-row="${report.groups.indexOf(g)}" data-report-group="${group}">${esc(group==='category'?(labels[g.key]||'Unclassified'):g.key||'No project')}</button></td><td>${g.count}</td><td>${reportAmount(g.total)}</td><td>${reportAmount(g.tax||0)}${g.unknownTax?' *':''}</td><td>${report.totals.total?(100*g.total/report.totals.total).toFixed(1)+'%':'—'}</td></tr>`).join('')}</tbody><tfoot><tr><th>Total</th><td>${report.totals.count}</td><td>${reportAmount(report.totals.total)}</td><td>${reportAmount(report.totals.tax)}${report.totals.unknownTax?' *':''}</td><td></td></tr></tfoot></table></div><p class="form-hint">${report.totals.unknownTax?'* Some tax amounts are missing. ':''}Select a name to open its receipts.</p>`;
+ return `<div class="report-table-wrap"><table class="report-table"><caption class="sr-only">Expense summary in ${esc(currency)}</caption><thead><tr>${heading('name',group==='category'?'Category':group==='project'?'Project':'Period')}${heading('count','Receipts')}${heading('total',`Total (${currency})`)}<th>Tax</th><th>Share</th></tr></thead><tbody>${rows.map(g=>`<tr><td><button class="text-button" data-spending-key="${esc(g.key??'')}" data-report-group="${group}">${esc(group==='category'?(labels[g.key]||'Unclassified'):g.key||'No project')}</button></td><td>${g.count}</td><td>${reportAmount(g.total)}</td><td>${reportAmount(g.tax||0)}${g.unknownTax?' *':''}</td><td>${report.totals.total?(100*g.total/report.totals.total).toFixed(1)+'%':'—'}</td></tr>`).join('')}</tbody><tfoot><tr><th>Total</th><td>${report.totals.count}</td><td>${reportAmount(report.totals.total)}</td><td>${reportAmount(report.totals.tax)}${report.totals.unknownTax?' *':''}</td><td></td></tr></tfoot></table></div><p class="form-hint">${report.totals.unknownTax?'* Some tax amounts are missing. ':''}Select a name to open its receipts.</p>`;
 }
 function setReportView(next){
  reportView=next;
@@ -394,24 +456,25 @@ async function renderDashboard(){
  const range=spendingRange(),group=activeView==='overview'?'category':$('#spending-group').value;
  const params={mode:'range',currency,project:$('#spending-project').value,category:$('#spending-category').value,...range};
  reportSnapshot=null;$('#spending-download').disabled=true;$('#category-bars').setAttribute('aria-busy','true');
- let report,trend;try{[report,trend]=await Promise.all([api('/api/dashboard?'+new URLSearchParams({...params,group})),activeView==='overview'?api('/api/dashboard?'+new URLSearchParams({...params,group:'month'})):null]);}catch(e){if(sequence!==dashboardSequence)return;$('#dashboard-note').textContent=e.message;$('#dashboard-metrics').innerHTML='';$('#category-bars').innerHTML='';$('#category-bars').setAttribute('aria-busy','false');return;}
+ let report,trend,projects;try{[report,trend,projects]=await Promise.all([api('/api/dashboard?'+new URLSearchParams({...params,group})),activeView==='overview'?api('/api/dashboard?'+new URLSearchParams({...params,group:'month'})):null,activeView==='overview'?api('/api/dashboard?'+new URLSearchParams({...params,group:'project'})):null]);}catch(e){if(sequence!==dashboardSequence)return;$('#dashboard-note').textContent=e.message;$('#dashboard-metrics').innerHTML='';$('#category-bars').innerHTML='';$('#category-bars').setAttribute('aria-busy','false');return;}
  if(sequence!==dashboardSequence)return;
- reportSnapshot={report,trend,group,currency,params,view:activeView};$('#spending-download').disabled=false;$('#category-bars').setAttribute('aria-busy','false');
+ reportSnapshot={report,trend,projects,range,group,currency,params,view:activeView};$('#spending-download').disabled=false;$('#category-bars').setAttribute('aria-busy','false');
  const t=report.totals,amount=reportAmount;
- const metric=(label,value,note,attention=false)=>`<div class="dashboard-metric${attention?' is-attention':''}"><small>${label}</small><strong>${value}</strong><span>${note}</span></div>`;
- $('#dashboard-metrics').innerHTML=metric('Total',`${amount(t.total)}<small>${esc(currency)}</small>`,`${t.count} receipt${t.count===1?'':'s'}`)+metric('Average per receipt',amount(t.count-t.unknownTotal?t.total/(t.count-t.unknownTotal):0),'Known amounts only')+metric('Tax recorded',amount(t.tax),`${esc(currency)}${t.unknownTax?' · incomplete':''}`)+metric('Needs attention',t.pending,`${amount(t.pendingAmount)} ${esc(currency)} provisional`,t.pending>0);
+ const stat=(value,label,attention=false)=>`<span class="stat${attention?' is-attention':''}"><b>${value}</b>${label}</span>`;
+ const period=$('#spending-period').selectedOptions[0]?.text||'',[whole,cents]=amount(t.total).split('.');
+ $('#dashboard-metrics').innerHTML=`<div class="metric-hero"><small>Total · ${esc(period)}</small><strong>${whole}<span>.${cents} ${esc(currency)}</span></strong></div><div class="metric-row">${stat(t.count,`receipt${t.count===1?'':'s'}`)}${stat(amount(t.count-t.unknownTotal?t.total/(t.count-t.unknownTotal):0),'average per receipt')}${stat(amount(t.tax),`tax recorded${t.unknownTax?' · incomplete':''}`)}${stat(t.pending,`need a look · ${amount(t.pendingAmount)} provisional`,t.pending>0)}</div>`;
  $('#spending-group-title').textContent=activeView==='overview'?'At a glance':activeView==='trends'?'Expenses over time':activeView==='table'?'Summary table':'Where expenses go';
  paintReport();
 }
 function paintReport(){
  if(!reportSnapshot)return;
- const {report,trend,group,currency,view:activeView}=reportSnapshot,t=report.totals;
- const markup=!report.groups.length?'<div class="report-empty"><h3>No expenses in this selection</h3><p>Try another period, project or category.</p></div>':activeView==='overview'?`<div class="report-overview"><section class="report-panel"><h3>Over time</h3>${reportChart(trend,'month',currency)}</section><section class="report-panel"><h3>By category</h3>${reportChart(report,'category',currency)}</section></div>`:activeView==='table'?reportTable(report,group,currency):reportChart(report,group,currency);
+ const {report,trend,projects,range,group,currency,view:activeView}=reportSnapshot,t=report.totals;
+ const markup=!report.groups.length?'<div class="report-empty"><h3>No expenses in this selection</h3><p>Try another period, project or category.</p></div>':activeView==='overview'?`<div class="report-overview"><section class="report-panel wide"><h3>Over time</h3>${reportChart(trend,'month',currency,range)}</section><section class="report-panel"><h3>By category</h3>${reportChart(report,'category',currency)}</section><section class="report-panel"><h3>By project</h3>${reportChart(projects,'project',currency)}</section></div>`:activeView==='table'?reportTable(report,group,currency):reportChart(report,group,currency,range);
  const focusSort=document.activeElement?.dataset.reportSort;
  if($('#category-bars').innerHTML!==markup)$('#category-bars').innerHTML=markup;
  const gaps=[t.unknownTotal&&`${t.unknownTotal} without a total`,t.unknownTax&&`${t.unknownTax} without tax`,report.undated&&`${report.undated} undated, not shown`].filter(Boolean);
  $('#dashboard-note').textContent=`By receipt date. Includes receipts that need attention; unconfirmed duplicates are excluded.${gaps.length?' '+gaps.join(' · ')+'.':''}`;
- document.querySelectorAll('[data-spending-row]').forEach(b=>b.onclick=()=>{const source=b.dataset.reportGroup==='month'&&trend?trend:report;drillDashboard({group:b.dataset.reportGroup,key:source.groups[Number(b.dataset.spendingRow)].key});});
+ document.querySelectorAll('[data-spending-key]').forEach(b=>b.onclick=()=>drillDashboard({group:b.dataset.reportGroup,key:b.dataset.spendingKey}));
  document.querySelectorAll('[data-report-sort]').forEach(b=>b.onclick=()=>{const next=b.dataset.reportSort;reportDirection=next===reportSort?(reportDirection==='asc'?'desc':'asc'):next==='name'?'asc':'desc';reportSort=next;paintReport();});
  if(focusSort)document.querySelector(`[data-report-sort="${focusSort}"]`)?.focus({preventScroll:true});
  const message=`Showing ${t.count} receipts in ${currency}.`+(activeView==='table'?` Sorted by ${reportSort==='name'?'name':reportSort==='count'?'receipt count':'total'}, ${reportDirection==='asc'?'ascending':'descending'}.`:'');
@@ -434,21 +497,22 @@ for(const id of ['spending-period','spending-from','spending-to','dashboard-curr
 $('#dashboard-open').onclick=()=>showPage('overview');
 $('#dashboard-receipts').onclick=()=>drillDashboard();
 
-function resetFilters(){for(const [key,id] of Object.entries(filterIds))$('#'+id).value=key==='sort'?'newest':'';}
+function resetFilters(){for(const [key,id] of Object.entries(filterIds))$('#'+id).value=key==='sort'?'date':'';}
 function persistFilters(f){
-  const params=new URLSearchParams();for(const [key,value] of Object.entries(f))if(value&&key!=='projectExact'&&!(key==='sort'&&value==='newest')&&!(key==='status'&&value==='all'))params.set(key,value);
+  const params=new URLSearchParams();for(const [key,value] of Object.entries(f))if(value&&key!=='projectExact'&&!(key==='sort'&&value==='date')&&!(key==='status'&&value==='all'))params.set(key,value);
   const next=location.pathname+(params.size?'?'+params:'')+location.hash;if(next!==location.pathname+location.search+location.hash)history.replaceState(null,'',next);
 }
 function showPage(next,updateURL=true){
-  page=next;$('#projects-page').hidden=next!=='projects';$('#projects-nav').classList.toggle('active',next==='projects');if(next==='projects'){$('#projects-page').append($('#projects-content'));loadProjects().then(paintProjects).catch(e=>notify(e.message));}
+  page=next;$('#projects-page').hidden=next!=='projects';if(next==='projects'){$('#projects-page').append($('#projects-content'));loadProjects().then(paintProjects).catch(e=>notify(e.message));}
   $('#receipt-workspace').hidden=next!=='receipts';$('#dashboard').hidden=next!=='overview';$('#settings-page').hidden=next!=='settings';
   $('#daily-bot-link').hidden=next!=='receipts'||!botStatus?.paired;$('#export-open').hidden=['settings','projects'].includes(next);
   $('#dashboard-open').classList.toggle('active',next==='overview');$('#settings-open').classList.toggle('active',next==='settings');
   $('#receipts-open').classList.toggle('active',next==='receipts');
-  document.querySelectorAll('.sidebar .nav-item').forEach(button=>{if(button.classList.contains('active'))button.setAttribute('aria-current','page');else button.removeAttribute('aria-current');});
+  $('#page-heading').classList.toggle('is-home',next==='receipts');
+  document.querySelectorAll('.nav .nav-item').forEach(button=>{if(button.classList.contains('active'))button.setAttribute('aria-current','page');else button.removeAttribute('aria-current');});
   syncReceiptTabs();
-  $('#page-title').textContent=next==='projects'?'Projects':next==='overview'?'Expenses':next==='settings'?'Settings':'Receipts';
-  $('#page-description').textContent=next==='projects'?'Group receipts by trip, client or job.':next==='overview'?'Totals by receipt date. Select a bar or row to open its receipts.':next==='settings'?'Manage your company, members and receipt storage.':'';
+  $('#page-title').textContent=next==='projects'?'Projects':next==='overview'?'Spending':next==='settings'?'Settings':'Receipts';
+  $('#page-description').textContent=next==='projects'?'Group receipts by trip, client or job.':next==='overview'?'Totals by receipt date. Select a month or row to open its receipts.':next==='settings'?'Manage your company, members and receipt storage.':'';
   if(updateURL)history.replaceState(null,'',location.pathname+location.search+(next==='receipts'?'':'#'+next));
   if(next==='overview')renderDashboard();if(next==='settings')refreshHealth();
   window.scrollTo({top:0,behavior:'instant'});
@@ -491,7 +555,7 @@ async function changeProject(method,input){
  catch(e){$('#projects-error').textContent=e.message;$('#projects-error').hidden=false;return false;}
 }
 async function openProjects(){try{$('#projects-dialog').append($('#projects-content'));await loadProjects();paintProjects();$('#projects-error').hidden=true;$('#projects-dialog').showModal();}catch(e){notify(e.message);}}
-$('#projects-nav').onclick=()=>showPage('projects');
+$('#settings-projects-open').onclick=openProjects;
 $('#projects-dialog').addEventListener('close',()=>{if(page==='projects')$('#projects-page').append($('#projects-content'));});
 $('#receipt-projects-open').onclick=openProjects;$('#projects-close').onclick=()=>$('#projects-dialog').close();
 $('#project-create').onsubmit=async e=>{e.preventDefault();const name=$('#project-name').value.trim();if(await changeProject('POST',{name})){$('#project-name').value='';if($('#receipt-dialog').open){$('#receipt-project').value=name;$('#projects-dialog').close();}}};
@@ -523,3 +587,8 @@ $('#project-filter').addEventListener('change',()=>{$('#unassigned-filter').valu
 document.querySelector('.skip-link').onclick=event=>{event.preventDefault();$('#main-content').focus();$('#main-content').scrollIntoView({block:'start'});};
 
 $('#preview-dialog').addEventListener('keydown',event=>{if(event.target.matches('select')||previewPages<=1)return;const button=event.key==='ArrowRight'?$('#preview-next'):event.key==='ArrowLeft'?$('#preview-prev'):null;if(button&&!button.disabled){event.preventDefault();button.click();}});
+
+// Search lives in the top bar on every page; typing there always means the receipt list.
+$('#search').addEventListener('input',()=>{if(page!=='receipts')showPage('receipts');});
+window.addEventListener('keydown',event=>{if((event.metaKey||event.ctrlKey)&&event.key.toLowerCase()==='k'&&!document.querySelector('dialog[open]')){event.preventDefault();$('#search').focus();$('#search').select();}});
+window.addEventListener('scroll',()=>$('#topbar').classList.toggle('scrolled',scrollY>4),{passive:true});
