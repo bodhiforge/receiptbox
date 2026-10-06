@@ -33,9 +33,10 @@ logs/
 
 # Receipt images, screenshots and documents never belong in the repository
 *.png
-# The app logo is the only tracked image.
+# Tracked images: the app logo, and README screenshots made from fictional demo data only.
 !public/logo-192.png
 !public/apple-touch-icon.png
+!docs/screenshots/*.png
 *.jpg
 *.jpeg
 *.heic
