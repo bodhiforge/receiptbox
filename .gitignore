@@ -1,0 +1,47 @@
+# Dependencies and OS files
+node_modules/
+.DS_Store
+
+# Runtime data: receipts, originals, previews, bot credentials, snapshots
+data/
+*.sqlite
+*.sqlite-*
+*.db
+snapshots/
+*-private.json
+
+# Secrets and machine-specific configuration
+.env
+.env.*
+!.env.example
+*.local.*
+*.pem
+*.key
+
+# Compiled Swift helpers; build them from the .swift sources on the target Mac
+bin/
+
+# Deployment and evaluation output
+releases/
+release.json
+deployment/
+evaluation/
+benchmarks/
+logs/
+*.log
+*.tar
+
+# Receipt images, screenshots and documents never belong in the repository
+*.png
+*.jpg
+*.jpeg
+*.heic
+*.pdf
+
+# Installed LaunchAgents; only templates are tracked
+*.plist
+!launchd/*.plist.example
+
+# Local agent settings
+.claude/
+.codex/

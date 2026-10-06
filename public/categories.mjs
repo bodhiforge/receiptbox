@@ -1,0 +1,2 @@
+export const categoryNames={fuel:'Fuel',meals:'Meals',software:'Software & subscriptions',telecom:'Phone & internet',office:'Office supplies',equipment:'Equipment',travel:'Travel',parking:'Parking & tolls',professional:'Professional services',insurance:'Insurance',bank_fees:'Bank fees',utilities:'Utilities',rent:'Rent & workspace',maintenance:'Repairs & maintenance',marketing:'Advertising & marketing',training:'Training & books',shipping:'Shipping & postage',other:'Other'};
+export const categories=['',...Object.keys(categoryNames)];

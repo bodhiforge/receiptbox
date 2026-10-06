@@ -1,0 +1,18 @@
+{
+  "name": "receiptbox",
+  "private": true,
+  "license": "MIT",
+  "version": "0.3.35",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node src/server.mjs",
+    "worker": "node src/worker.mjs",
+    "test": "node --test 'test/*.test.mjs'",
+    "check": "for file in src/*.mjs scripts/*.mjs test/*.mjs public/*.js public/*.mjs; do node --check \"$file\" || exit; done",
+    "qa": "node scripts/qa.mjs",
+    "build:native": "mkdir -p bin && xcrun swiftc native/receipt-image.swift -o bin/receipt-image && xcrun swiftc native/receipt-preview.swift -o bin/receipt-preview"
+  }
+}

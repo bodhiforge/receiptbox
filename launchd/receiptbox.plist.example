@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>PATH</key>
+		<string>/opt/homebrew/bin:/usr/bin:/bin</string>
+		<key>PORT</key>
+		<string>4317</string>
+		<key>RECEIPTBOX_ALLOWED_LOGIN</key>
+		<string>your-login@github</string>
+		<key>RECEIPTBOX_DATA</key>
+		<string>/Users/YOUR_USER/receiptbox/data</string>
+		<key>RECEIPTBOX_LOCAL_AI</key>
+		<string>1</string>
+		<key>RECEIPTBOX_LOCATION</key>
+		<string>Mini 4</string>
+		<key>RECEIPTBOX_PUBLIC_ORIGIN</key>
+		<string>https://YOUR-HOST.YOUR-TAILNET.ts.net:8443</string>
+	</dict>
+	<key>KeepAlive</key>
+	<true/>
+	<key>Label</key>
+	<string>com.example.receiptbox</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/opt/homebrew/bin/node</string>
+		<string>/Users/YOUR_USER/receiptbox/current/src/server.mjs</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>StandardErrorPath</key>
+	<string>/Users/YOUR_USER/receiptbox/logs/error.log</string>
+	<key>StandardOutPath</key>
+	<string>/Users/YOUR_USER/receiptbox/logs/app.log</string>
+	<key>ThrottleInterval</key>
+	<integer>10</integer>
+	<key>WorkingDirectory</key>
+	<string>/Users/YOUR_USER/receiptbox</string>
+</dict>
+</plist>
