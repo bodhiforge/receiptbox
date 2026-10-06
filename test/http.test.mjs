@@ -35,6 +35,9 @@ test('receipt lifecycle, originals, exports and durable state',async t=>{
   await t.test('shared filing policy is served as a browser module',async()=>{
     const response=await fetch(base+'/receipt-policy.mjs');assert.equal(response.status,200);assert.match(response.headers.get('content-type'),/javascript/);assert.match(await response.text(),/filingFields/);
   });
+  await t.test('app logo and touch icon are served from the allowlist',async()=>{
+    for(const path of ['/logo-192.png','/apple-touch-icon.png']){const response=await fetch(base+path);assert.equal(response.status,200);assert.equal(response.headers.get('content-type'),'image/png');assert.ok((await response.arrayBuffer()).byteLength>1000);}
+  });
   await t.test('empty store and honest file save',async()=>{
     assert.deepEqual((await request('/api/receipts')).body.items,[]);
     const result=await upload(pdf,'/api/receipts','receipt.pdf','Initial sample');assert.equal(result.status,201);receipt=result.body.receipt;

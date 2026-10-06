@@ -141,3 +141,7 @@ Receipts without a project are labelled "Default" instead of "No project" in the
 ## Reserved Default project name (0.4.2)
 
 "Default" (any case, surrounding spaces ignored) can no longer be used as a project name, because it labels receipts without a project. Creating or renaming a project to it, or setting it on a receipt from the web or a Telegram reply, is rejected with an explanation. Telegram replies that change nothing now state the actual reason instead of a generic date and amount hint.
+
+## Fox logo (0.4.3)
+
+The folded-receipt fox replaces the generic receipt icon as the brand mark, browser icon and home-screen icon (`public/logo-192.png`, `public/apple-touch-icon.png`). These two files are the only images the repository tracks. The empty receipt list now points to the + button and drop-anywhere upload instead of the removed upload card.

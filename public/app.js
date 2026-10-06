@@ -115,7 +115,7 @@ function paintList() {
   $('#pagination').hidden=listPage.total<=listPage.limit;$('#page-previous').disabled=offset===0;$('#page-next').disabled=!listPage.hasMore;$('#page-range').textContent=listPage.total?`${offset+1}–${offset+filtered.length} of ${listPage.total}`:'No results';
   if(!filtered.length) {
     const empty=facets.total===0;
-    $('#receipts').innerHTML=`<div class="empty-state"><div class="empty-icon" aria-hidden="true">▤</div><h3>${view==='trash'?'Trash is empty.':empty?'A clear place for every receipt.':view==='pending'&&!active.length?'You’re all caught up.':'No receipts match this view.'}</h3><p>${view==='trash'?'Deleted receipts appear here and can be restored.':empty?'Save your first receipt above. Its original and upload record will appear right here.':'Change your filters or add a new receipt.'}</p></div>`;
+    $('#receipts').innerHTML=`<div class="empty-state"><div class="empty-icon" aria-hidden="true">▤</div><h3>${view==='trash'?'Trash is empty.':empty?'A clear place for every receipt.':view==='pending'&&!active.length?'You’re all caught up.':'No receipts match this view.'}</h3><p>${view==='trash'?'Deleted receipts appear here and can be restored.':empty?'Press + or drop a photo or PDF anywhere on this page. Its original and upload record will appear here.':'Change your filters or add a new receipt.'}</p></div>`;
     return;
   }
   // Receipt-date order reads as a ledger grouped by month; other orders stay a flat list.

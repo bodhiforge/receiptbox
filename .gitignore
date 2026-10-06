@@ -33,6 +33,9 @@ logs/
 
 # Receipt images, screenshots and documents never belong in the repository
 *.png
+# The app logo is the only tracked image.
+!public/logo-192.png
+!public/apple-touch-icon.png
 *.jpg
 *.jpeg
 *.heic
