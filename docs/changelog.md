@@ -145,3 +145,7 @@ Receipts without a project are labelled "Default" instead of "No project" in the
 ## Fox logo (0.4.3)
 
 The folded-receipt fox replaces the generic receipt icon as the brand mark, browser icon and home-screen icon (`public/logo-192.png`, `public/apple-touch-icon.png`). These two files are the only images the repository tracks. The empty receipt list now points to the + button and drop-anywhere upload instead of the removed upload card.
+
+## IBM Plex fonts (0.4.4)
+
+The Ledger theme's IBM Plex Sans (variable, 400–600) and IBM Plex Mono (400, 500) now ship with the app as Latin-subset WOFF2 files served from the same origin, so the content security policy is unchanged and no third-party font host is contacted. Characters outside the Latin subset fall back to system fonts. The SIL Open Font License travels with the files as `public/IBM-Plex-OFL.txt`.

@@ -37,6 +37,7 @@ test('receipt lifecycle, originals, exports and durable state',async t=>{
   });
   await t.test('app logo and touch icon are served from the allowlist',async()=>{
     for(const path of ['/logo-192.png','/apple-touch-icon.png']){const response=await fetch(base+path);assert.equal(response.status,200);assert.equal(response.headers.get('content-type'),'image/png');assert.ok((await response.arrayBuffer()).byteLength>1000);}
+    for(const path of ['/plex-sans-var-latin.woff2', '/plex-mono-400-latin.woff2', '/plex-mono-500-latin.woff2']){const response=await fetch(base+path);assert.equal(response.status,200);assert.equal(response.headers.get('content-type'),'font/woff2');assert.equal(Buffer.from(await response.arrayBuffer()).subarray(0,4).toString(),'wOF2');}
   });
   await t.test('empty store and honest file save',async()=>{
     assert.deepEqual((await request('/api/receipts')).body.items,[]);
