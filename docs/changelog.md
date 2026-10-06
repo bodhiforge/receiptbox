@@ -133,3 +133,7 @@ The web app moves from layered gray cards to one warm paper surface separated by
 ## Ledger redesign (0.4.0)
 
 The web app is restructured around how receipts are read back. A thin top bar replaces the sidebar with three destinations (Receipts, Spending, Settings); search and an add button live in the bar on every page, with ⌘K to search and drop-anywhere upload. Receipts opens on this month's CAD total with a twelve-month strip, then a "Needs a look" list naming what each exception lacks, then a ledger grouped by receipt month with per-month, per-currency totals for the receipts shown. Receipt details open in a right-hand drawer (a bottom sheet on phones) with the original first and the fields as an editable property list. Spending leads with one period total, fills every month of the selected range in the chart, and shows categories and projects side by side. Projects are managed from Settings. The Ledger theme uses pale green paper, dark green ink and monospaced figures (IBM Plex when installed, system fonts otherwise). Data, recognition, filing rules and APIs are unchanged.
+
+## Default project label (0.4.1)
+
+Receipts without a project are labelled "Default" instead of "No project" in the receipt drawer, Spending breakdowns, the summary table and summary CSV, and the filter chip. Stored data is unchanged: these receipts still have an empty project.
