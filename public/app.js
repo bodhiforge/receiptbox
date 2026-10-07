@@ -1,5 +1,5 @@
 import {groupLabel,sortedGroups,summaryCSV} from './reporting.mjs';
-import {categoryText,fieldText,receiptFeedback,issueText} from './feedback.mjs';
+import {categoryText,fieldText,receiptFeedback,issueText,dateChoices,displayDate} from './feedback.mjs';
 import {filingFields} from './receipt-policy.mjs';
 import {receiptName,receiptLabel,filterError,calendarRange,datePreset,defaultProjectLabel} from './receipts.mjs';
 const $ = selector => document.querySelector(selector);
@@ -381,6 +381,8 @@ function renderRecognition(){
   const panel=$('#recognition-panel'),job=selected.ai,state=receiptFeedback(selected);
   panel.className='recognition-panel feedback-'+state.state;
   panel.innerHTML=`<div class="feedback-heading"><span class="feedback-symbol">${state.state==='filed'?'✓':state.state==='processing'?'◌':'!'}</span><div><h3>${esc(state.title)}</h3><p>${esc(state.detail)}</p></div></div>${state.issues.map(i=>`<button type="button" class="issue-action" data-issue-field="${esc(i.field)}" data-issue-code="${esc(i.code)}"><span>${esc(issueText(i))}</span><b>Fix →</b></button>`).join('')}${job?.status==='failed'?'<button type="button" class="button secondary" id="ai-retry">Retry recognition</button>':''}`;
+  const dates=dateChoices(selected);
+  if(dates.length)panel.innerHTML+=`<div class="duplicate-actions">${dates.map(value=>`<button type="button" class="button secondary" data-date-choice="${esc(value)}">${esc(displayDate(value))}</button>`).join('')}</div>`;
   if(selected.possibleDuplicate)panel.innerHTML+=`<aside class="duplicate-hint"><p>Use existing moves this upload to Trash. Keep both includes both receipts.</p><a class="text-link" href="/#receipt=${esc(selected.possibleDuplicate.id)}" target="_blank" rel="noopener">View existing ↗</a><div class="duplicate-actions"><button type="button" class="button secondary" data-duplicate-choice="existing">Use existing</button><button type="button" class="button primary" data-duplicate-choice="keep">Keep both</button></div></aside>`;
   for(const button of panel.querySelectorAll('[data-duplicate-choice]'))button.onclick=async()=>{
     if(dirty()){notify('Save your edits before confirming.');return;}
@@ -388,6 +390,8 @@ function renderRecognition(){
   };
   if(job?.result)panel.innerHTML+=`<details class="evidence-drawer"><summary>What was read</summary>${Object.entries(job.result.fields).filter(([,v])=>v.value).map(([k,v])=>`<p><b>${esc(fieldLabels[k]||k)} · ${esc(v.value)}</b><br><small>${esc(v.evidence)}</small></p>`).join('')}<details><summary>Model notes</summary>${(job.result.warnings||[]).map(w=>`<p>${esc(w)}</p>`).join('')}</details></details>`;
   document.querySelectorAll('[data-issue-field]').forEach(button=>button.onclick=()=>{const key=button.dataset.issueField;if(button.dataset.issueCode==='arithmetic'){for(const name of ['subtotal','total','tax','tip']){const field=$('#receipt-form').elements[name];for(let parent=field?.parentElement;parent;parent=parent.parentElement)if(parent.tagName==='DETAILS')parent.open=true;}}if(key==='document'){$('#document-confirm-label').hidden=false;$('#document-confirm').focus();return;}const input=$('#receipt-form').elements[key];if(input){for(let parent=input.parentElement;parent;parent=parent.parentElement)if(parent.tagName==='DETAILS')parent.open=true;input.focus();input.scrollIntoView({block:'center',behavior:'smooth'});}});
+  // Choosing a reading saves it like typing the date and pressing Save.
+  for(const button of panel.querySelectorAll('[data-date-choice]'))button.onclick=()=>{$('#receipt-form').elements.date.value=button.dataset.dateChoice;$('#receipt-form').requestSubmit();};
   if($('#ai-retry'))$('#ai-retry').onclick=()=>recognitionAction('retry');
 }
 

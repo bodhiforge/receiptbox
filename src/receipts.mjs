@@ -99,7 +99,7 @@ function validate(input) {
         const editedFields=fields.filter(key=>details[key]!==previous[key]);
         const checked=assessRecognition({...previous,...details,events:[...previous.events,{type:'edited',details:Object.fromEntries(editedFields.map(key=>[key,true]))}]},{fields:result?.fields||{},documentKind:result?.documentKind||'receipt',warnings:result?.warnings||[]},{fillMissing:false});
         Object.assign(details,checked.values);
-        for(const issue of result?.assessment?.issues||[])if(issue.code==='unsupported'&&!details[issue.field]&&details[issue.field]===previous[issue.field]&&!checked.issues.some(i=>i.field===issue.field))checked.issues.push(issue);
+        for(const issue of result?.assessment?.issues||[])if(['unsupported','ambiguous_date'].includes(issue.code)&&!details[issue.field]&&details[issue.field]===previous[issue.field]&&!checked.issues.some(i=>i.field===issue.field))checked.issues.push(issue);
         const confirmed=input.confirmDocument===true||result?.assessment?.documentConfirmed===true;
         if(confirmed)checked.issues=checked.issues.filter(i=>i.field!=='document');
         checked.decision=checked.issues.length?'attention':'file';
@@ -149,7 +149,7 @@ function acceptRecognition(id,jobId,version){
     for(const key of fields)if(details[key]!==previous[key])changes[key]={from:previous[key],to:details[key]};
     db.prepare('UPDATE receipt_ai SET result=? WHERE id=?').run(JSON.stringify({...job.result,assessment}),job.id);
     db.prepare('UPDATE receipts SET details=?,updated=?,version=version+1 WHERE id=?').run(JSON.stringify(details),utc(),id);
-    event(id,'recognition_applied',{job:job.id,model:job.model,policy:policyVersion,decision:assessment.decision,issues:assessment.issues,...(assessment.currencySource?{currencySource:assessment.currencySource}:{}),changes});index(id);
+    event(id,'recognition_applied',{job:job.id,model:job.model,policy:policyVersion,decision:assessment.decision,issues:assessment.issues,...(assessment.currencySource?{currencySource:assessment.currencySource}:{}),...(assessment.dateSource?{dateSource:assessment.dateSource}:{}),changes});index(id);
     return get(id);
   }
   if(recognition)recognition.onReady=autoApply;

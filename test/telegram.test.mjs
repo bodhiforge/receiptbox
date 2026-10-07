@@ -109,3 +109,20 @@ test('duplicate confirmation buttons require authorized owner and mapped message
  const buttons=inbox.resultButtons({id,version:3,duplicatePending:true,possibleDuplicate:{id:'older'}},{button:'Review receipt'});assert.deepEqual(buttons[0].map(b=>b.text),['Use existing','Keep both']);assert.ok(buttons[0].every(b=>Buffer.byteLength(b.callback_data)<=64));
  }finally{db.close();rmSync(data,{recursive:true,force:true});}
 });
+
+test('ambiguous date buttons save the chosen reading for the mapped receipt only',async()=>{
+ const data=mkdtempSync(join(tmpdir(),'receiptbox-date-actions-')),db=openDatabase(':memory:');const saved=[],calls=[];
+ const id='12345678-1234-1234-1234-123456789abc';
+ const receipt={id,version:3,status:'review',date:'',ai:{result:{assessment:{issues:[{field:'date',code:'ambiguous_date',printed:'10/07/2026',candidates:['2026-10-07','2026-07-10']}]}}}};
+ const inbox=new TelegramInbox({db,data,publicOrigin:'https://receipts.example',getReceipt:()=>receipt,updateDetails:async(target,details)=>{saved.push([target,details]);return {...receipt,...details,status:'complete',version:4};},fetcher:async(url,options)=>{calls.push(JSON.parse(options.body));return Response.json({ok:true,result:{}});}});inbox.config={bot:'1',owner:'42',token:'fixture'};
+ try{db.prepare("INSERT INTO receipts(id,number,created,updated,details) VALUES(?,1,'now','now','{}')").run(id);db.prepare("INSERT INTO telegram_followups VALUES('1','42',100,?)").run(id);
+  const buttons=inbox.resultButtons(receipt,{button:'Open receipt'});
+  assert.deepEqual(buttons[0].map(b=>b.text),['7 Oct 2026','10 Jul 2026']);assert.ok(buttons[0].every(b=>Buffer.byteLength(b.callback_data)<=64));
+  const cb=(sender,message,data)=>({callback_query:{id:'q',from:{id:sender},message:{message_id:message,chat:{id:sender,type:'private'}},data}});
+  await inbox.handle(cb(99,100,buttons[0][0].callback_data));await inbox.handle(cb(42,999,buttons[0][0].callback_data));assert.equal(saved.length,0);
+  await inbox.handle(cb(42,100,`date:0:2:${id}`));assert.equal(saved.length,0);assert.match(calls.at(-1).text,/changed/);
+  await inbox.handle(cb(42,100,buttons[0][0].callback_data));assert.deepEqual(saved,[[id,{date:'2026-10-07'}]]);
+  assert.match(calls.at(-2).text,/Date saved as 7 Oct 2026\. Filed\./);assert.match(calls.at(-1).text,/Filed/);
+  assert.deepEqual(inbox.resultButtons({...receipt,date:'2026-10-07'},{button:'Open receipt'}).length,1);
+ }finally{db.close();rmSync(data,{recursive:true,force:true});}
+});

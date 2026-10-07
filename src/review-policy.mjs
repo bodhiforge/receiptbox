@@ -1,23 +1,14 @@
 import {filingFields} from '../public/receipt-policy.mjs';
 import {money} from './business.mjs';
+import {resolveDate} from './receipt-date.mjs';
 
-export const policyVersion='exception-only-v7-subtotal-evidence';
+export const policyVersion='exception-only-v8-date-candidates';
 const amounts=['subtotal','total','tax','gst','hst','pst','qst','tip'];
 const normal=s=>String(s||'').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]/gu,'');
 function supported(key,item){
   const {value,evidence}=item;
   if(!value||!evidence)return false;
   if(amounts.includes(key))return (evidence.match(/\d[\d,]*(?:\.\d{1,2})?/g)||[]).some(v=>money(v.replaceAll(',',''))===money(value));
-  if(key==='date'){
-    if(evidence.includes(value))return true;
-    const [y,m,d]=value.split('-').map(Number);
-    const month=['January','February','March','April','May','June','July','August','September','October','November','December'][m-1];
-    if(new RegExp(`\\b${month.slice(0,3)}[a-z]*\\b`,'i').test(evidence)&&new RegExp(`\\b0?${d}\\b`).test(evidence)&&evidence.includes(String(y)))return true;
-    const parts=evidence.match(/\b(\d{1,4})[/.\-](\d{1,2})[/.\-](\d{1,4})\b/);
-    if(!parts)return false;
-    const [a,b,c]=parts.slice(1).map(Number);
-    return (a===y&&b===m&&c===d)||(c===y&&((a===m&&b===d&&(b>12||a===b))||(a===d&&b===m&&a>12)));
-  }
   if(key==='currency')return new RegExp(`\\b${value}\\b`,'i').test(evidence)||(value==='CAD'&&/canada|canadian|\b(?:BC|AB|ON|QC|NS|NB|MB|SK|NL|PE|NT|NU|YT)\b|\b[A-Z]\d[A-Z]\s?\d[A-Z]\d\b/i.test(evidence));
   if(key==='merchant')return normal(evidence).includes(normal(value));
   return item.confidence!=='low';
@@ -45,6 +36,7 @@ export function assessRecognition(receipt,result,{now=new Date(),fillMissing=tru
   const values={},issues=[];
   const edited=new Set(receipt.events.filter(e=>e.type==='edited').flatMap(e=>Object.keys(e.details)));
   const rejected=new Set();
+  let dateSource;
   const subItem=result.fields.subtotal;
   // Subtotal has a distinct accounting meaning. A current balance, sales line
   // or amount due is not evidence of a pre-tax subtotal, even if numeric.
@@ -61,6 +53,14 @@ export function assessRecognition(receipt,result,{now=new Date(),fillMissing=tru
   for(const [key,item] of Object.entries(result.fields)){
     if(key==='currency'||rejected.has(key)||!fillMissing)continue;
     if(receipt[key]||edited.has(key))continue;
+    if(key==='date'){
+      // The model copies the printed date; day/month order is decided here.
+      const date=resolveDate({evidence:item.evidence,uploadedAt:receipt.created||now.toISOString(),lines:result.localDateEvidence});
+      if(date.value){values.date=date.value;dateSource=date.source;}
+      else if(date.candidates.length>1)issues.push({field:'date',code:'ambiguous_date',printed:date.printed,candidates:date.candidates,message:`Choose the receipt date: ${date.printed} can be read more than one way.`});
+      else if(item.value)issues.push({field:'date',code:'unsupported',message:'Check date: the extracted value is not supported by its evidence.'});
+      continue;
+    }
     if(supported(key,item))values[key]=item.value;
     else if(item.value&&['date','total','tax','currency'].includes(key))issues.push({field:key,code:'unsupported',message:`Check ${key}: the extracted value is not supported by its evidence.`});
   }
@@ -81,5 +81,5 @@ export function assessRecognition(receipt,result,{now=new Date(),fillMissing=tru
   // Keep raw model warnings as evidence. Only specific transaction exceptions
   // affect filing, never generic business-purpose or tax-eligibility commentary.
   for(const warning of result.warnings||[])if(/multiple (?:independent )?transactions|refund|negative amount/i.test(warning))issues.push({field:'document',code:'transaction',message:warning});
-  return {version:policyVersion,values,issues,...(currencySource?{currencySource}:{}),decision:issues.length?'attention':'file'};
+  return {version:policyVersion,values,issues,...(currencySource?{currencySource}:{}),...(dateSource?{dateSource}:{}),decision:issues.length?'attention':'file'};
 }

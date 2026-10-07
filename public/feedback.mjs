@@ -7,6 +7,7 @@ export function issueText(issue){
  const field=(fieldText[issue.field]||'this detail').toLowerCase();
  if(issue.code==='missing')return `Add the ${field}.`;
  if(issue.code==='unsupported')return `Check the ${field} against the original.`;
+ if(issue.code==='ambiguous_date')return `Choose the receipt date: ${issue.printed||'the printed date'} could be ${(issue.candidates||[]).map(displayDate).join(' or ')}.`;
  if(issue.code==='future_date')return 'The date is in the future. Check the receipt date.';
  if(issue.code==='tax_exceeds_total')return 'Tax is higher than the total. Check these two amounts.';
  if(issue.code==='arithmetic')return 'The amounts do not add up. Check the subtotal, tax and total.';
@@ -24,6 +25,12 @@ export function receiptFeedback(receipt,job=receipt.ai){
 // Telegram HTML is escaped at the boundary; receipt text is untrusted OCR/user input.
 export const escapeHtml=value=>String(value??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 const short=value=>String(value||'').replace(/[\r\n]+/g,' ').slice(0,160);
+export function displayDate(value){
+ const m=String(value||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+ return m?`${Number(m[3])} ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][Number(m[2])-1]} ${m[1]}`:value;
+}
+// Date choices are offered only while the receipt still has no date.
+export const dateChoices=receipt=>receipt.date||receipt.status==='complete'?[]:(receipt.ai?.result?.assessment?.issues||[]).find(i=>i.code==='ambiguous_date')?.candidates||[];
 export function receiptCard(receipt){
  const filename=receipt.files?.find(f=>f.name&&!/^telegram-photo-\d+\./.test(f.name))?.name;
  const identity=short(receipt.title||receipt.merchant||receipt.category?receiptLabel(receipt):filename||'Photo receipt');
@@ -32,8 +39,7 @@ export function receiptCard(receipt){
   const n=Number(receipt.total),amount=Number.isFinite(n)?n.toLocaleString('en-CA',{minimumFractionDigits:2,maximumFractionDigits:2}):receipt.total;
   lines.push(`<b>${escapeHtml([receipt.currency,amount].filter(Boolean).join(' '))}</b>`);
  }
- const m=String(receipt.date||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);
- const date=m?`${Number(m[3])} ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][Number(m[2])-1]} ${m[1]}`:receipt.date;
+ const date=displayDate(receipt.date);
  const metadata=[date,receipt.category==='other'?null:categoryText[receipt.category]].filter(Boolean);
  if(metadata.length)lines.push(escapeHtml(metadata.join(' · ')));
  if(receipt.project)lines.push(`Project: ${escapeHtml(short(receipt.project))}`);
@@ -48,7 +54,7 @@ export function resultMessage(receipt,job){
  const failed=job?.status==='failed'&&status.state!=='filed'&&!receipt.duplicatePending;
  const single=status.issues.length===1?status.issues[0]:null;
  const prompts={date:'date: YYYY-MM-DD',total:'total: AMOUNT',merchant:'merchant: Store name',currency:'currency: CURRENCY',tax:'tax: AMOUNT'};
- const action=single?.code==='missing'?issueText(single).replace(/\.$/,''):single?.code==='arithmetic'?'Check the amounts':status.issues.length>1?`Check ${status.issues.length} details`:'Check receipt details';
+ const action=single?.code==='missing'?issueText(single).replace(/\.$/,''):single?.code==='ambiguous_date'?'Choose the date':single?.code==='arithmetic'?'Check the amounts':status.issues.length>1?`Check ${status.issues.length} details`:'Check receipt details';
  const title=receipt.duplicatePending?'🔁 Is this the same receipt?':status.state==='filed'?'✅ Filed':status.state==='processing'?'📥 Saved · Reading…':failed?"❗ Couldn't read this receipt":`✏️ ${action}`;
  const text=[`<b>${escapeHtml(title)}</b>`,receiptCard(receipt)];
  if(receipt.duplicatePending)text.push('Excluded from totals until you choose.');

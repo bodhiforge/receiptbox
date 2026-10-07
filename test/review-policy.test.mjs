@@ -16,7 +16,7 @@ test('supported low-confidence bakery receipt files without business context or 
  const r=result();r.fields.tax.value='';assert.equal(assessRecognition(empty(),r,at).decision,'file');assert.ok(!('tax' in assessRecognition(empty(),r,at).values));
 });
 test('only concrete date, amount and document exceptions stop automatic filing',()=>{
- let r=result();r.fields.date.evidence='03/10/2026';assert.ok(assessRecognition(empty(),r,at).issues.some(i=>i.field==='date'));
+ let r=result();r.fields.date.evidence='03/10/2026';assert.ok(assessRecognition({...empty(),created:'2026-12-20T18:00:00Z'},r,at).issues.some(i=>i.field==='date'));
  r=result();r.fields.total={value:'40.00',evidence:'Total 40.00',confidence:'high'};assert.ok(assessRecognition(empty(),r,at).issues.some(i=>i.code==='arithmetic'));
  r=result();r.fields.tax={value:'100.00',evidence:'Tax 100.00',confidence:'high'};assert.ok(assessRecognition(empty(),r,at).issues.some(i=>i.code==='tax_exceeds_total'));
  r=result();r.fields.date={value:'2027-10-03',evidence:'2027-10-03',confidence:'high'};assert.ok(assessRecognition(empty(),r,at).issues.some(i=>i.code==='future_date'));
@@ -163,4 +163,17 @@ test('current charges cannot become a subtotal when adding tax to a historical b
  }finally{db.close();await rm(data,{recursive:true,force:true});}
  const real=result();real.fields.subtotal={value:'71.64',confidence:'high',evidence:'Subtotal: 71.64'};
  assert.ok(assessRecognition(empty(),real,at).issues.some(i=>i.code==='arithmetic'));
+});
+
+test('the model copies a numeric date and the policy decides its order',()=>{
+ const r=result();r.fields.date={value:null,confidence:'low',evidence:'10/07/2026 09:24 AM'};
+ let a=assessRecognition({...empty(),created:'2026-10-07T16:25:56Z'},r,{now:new Date('2026-10-07T16:26:00Z')});
+ assert.equal(a.values.date,'2026-10-07');assert.equal(a.dateSource,'upload_time');assert.equal(a.decision,'file');
+ // A model guess that disagrees with the printed text is not used.
+ r.fields.date.value='2026-07-10';a=assessRecognition({...empty(),created:'2026-10-07T16:25:56Z'},r,{now:new Date('2026-10-07T16:26:00Z')});assert.equal(a.values.date,'2026-10-07');
+ a=assessRecognition({...empty(),created:'2026-12-20T18:00:00Z'},r,{now:new Date('2026-12-20T18:00:00Z')});
+ const issue=a.issues.find(i=>i.field==='date');
+ assert.equal(a.decision,'attention');assert.equal(issue.code,'ambiguous_date');assert.deepEqual(issue.candidates,['2026-10-07','2026-07-10']);assert.ok(!('date' in a.values));
+ r.localDateEvidence=['VISA 15/10/2026 09:24'];a=assessRecognition({...empty(),created:'2026-12-20T18:00:00Z'},r,{now:new Date('2026-12-20T18:00:00Z')});assert.equal(a.values.date,'2026-07-10');assert.equal(a.dateSource,'printed_order');
+ r.fields.date={value:'2026-10-07',confidence:'high',evidence:'Thank you'};assert.equal(assessRecognition(empty(),r,at).issues.find(i=>i.field==='date').code,'unsupported');
 });

@@ -1,5 +1,5 @@
 import {Members} from './members.mjs';
-import {savedMessage,resultMessage,receiptCard} from '../public/feedback.mjs';
+import {savedMessage,resultMessage,receiptCard,dateChoices,displayDate} from '../public/feedback.mjs';
 import {existsSync,readFileSync,openSync,writeFileSync,fsyncSync,closeSync,renameSync} from 'node:fs';
 import {join,dirname} from 'node:path';
 import {randomBytes} from 'node:crypto';
@@ -107,6 +107,8 @@ export class TelegramInbox {
   }
   resultButtons(receipt,feedback){
     const buttons=[[{text:feedback.button,url:`${this.publicOrigin}/#receipt=${receipt.id}`}]];
+    const dates=dateChoices(receipt);
+    if(dates.length&&!receipt.duplicatePending)buttons.unshift(dates.slice(0,3).map((value,i)=>({text:displayDate(value),callback_data:`date:${i}:${receipt.version}:${receipt.id}`})));
     if(receipt.duplicatePending)buttons.unshift([{text:'Use existing',callback_data:`dup:e:${receipt.version}:${receipt.id}`},{text:'Keep both',callback_data:`dup:k:${receipt.version}:${receipt.id}`}]);
     if(receipt.possibleDuplicate&&!receipt.duplicatePending)buttons.unshift([{text:'View existing',url:`${this.publicOrigin}/#receipt=${receipt.possibleDuplicate.id}`}]);
     return buttons;
@@ -139,6 +141,18 @@ export class TelegramInbox {
         const title=duplicate[1]==='k'?'🔁 Kept both':'🔁 Kept the existing receipt';
         try{await this.editCard(chat,query.message.message_id,`<b>${title}</b>\n${receipt?receiptCard(receipt)+'\n':''}${text}`,receipt&&!receipt.deleted_at?[[{text:'Open receipt',url:`${this.publicOrigin}/#receipt=${id}`}]]:[]);}catch{/* The decision is saved; a delivery failure must not repeat it. */}
       }
+      return;
+    }
+    const date=query.data?.match(/^date:([0-2]):(\d+):([a-f0-9-]{36})$/);
+    if(date){const chat=String(query.message.chat.id),id=date[3];
+      const row=this.db.prepare('SELECT receipt FROM telegram_receipts WHERE bot=? AND chat=? AND reply=? UNION ALL SELECT receipt FROM telegram_followups WHERE bot=? AND chat=? AND message=?').get(this.config.bot,chat,query.message.message_id,this.config.bot,chat,query.message.message_id);
+      if(!row||row.receipt!==id||!this.canEdit(chat,id))return;
+      const receipt=this.getReceipt?.(id),value=receipt&&dateChoices(receipt)[Number(date[1])];
+      let text,saved;
+      if(!value||receipt.version!==Number(date[2])||receipt.deleted_at)text='This receipt changed. Open it to check the date.';
+      else{try{saved=await this.updateDetails(id,{date:value});text=saved.status==='complete'?`Date saved as ${displayDate(value)}. Filed.`:`Date saved as ${displayDate(value)}.`;}catch(error){text=error.status?error.message:'Could not save the date. Open the receipt and try again.';}}
+      await this.call('answerCallbackQuery',{callback_query_id:query.id,text:text.slice(0,190),show_alert:!saved});
+      if(saved){const feedback=resultMessage(saved,saved.ai);try{await this.editCard(chat,query.message.message_id,feedback.text,this.resultButtons(saved,feedback));}catch{/* The date is saved; a delivery failure must not repeat it. */}}
       return;
     }
     const accept=query.data?.match(/^accept:(\d+):(\d+):([a-f0-9-]{36})$/),complete=query.data?.match(/^complete:(\d+):([a-f0-9-]{36})$/);

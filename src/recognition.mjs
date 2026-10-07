@@ -29,7 +29,7 @@ export function sanitiseResult(input){
   return {documentKind:input.documentKind,fields,warnings:[...new Set(warnings)].slice(0,16)};
 }
 export const receiptFingerprint=receipt=>createHash('sha256').update(receipt.files.map(f=>f.hash).sort().join('|')).digest('hex');
-export const pipelineVersion='receipt-v3';
+export const pipelineVersion='receipt-v4';
 export class RecognitionQueue {
   constructor({db,getReceipt,runModel,enabled=false,clock=Date.now,leaseMs=120000}) {
     Object.assign(this,{db,getReceipt,runModel,enabled,clock,leaseMs});
@@ -91,6 +91,7 @@ export class RecognitionQueue {
         const output=await this.runModel(receipt),result=sanitiseResult(output.result);
         // This comes from the local OCR adapter, outside the model JSON.
         if(Array.isArray(output.currencyEvidence))result.localCurrencyEvidence=output.currencyEvidence.filter(v=>typeof v==='string').slice(0,40).map(v=>v.slice(0,400));
+        if(Array.isArray(output.dateEvidence))result.localDateEvidence=output.dateEvidence.filter(v=>typeof v==='string').slice(0,20).map(v=>v.slice(0,200));
         transaction(this.db,()=>{
           if(!owns())return;
           if(receiptFingerprint(this.getReceipt(job.receipt))!==job.fingerprint){
