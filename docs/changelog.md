@@ -157,3 +157,7 @@ The Trash view has an owner-only "Empty Trash" action. The confirmation names ho
 ## Printed-date interpretation (0.4.6)
 
 The model copies the purchase date as printed and no longer decides day/month order. `src/receipt-date.mjs` lists every valid reading of the printed text. One reading is saved directly. For an all-numeric date such as 10/07/2026, another printed date with a part above 12 sets the order; otherwise the upload time decides only when one reading is within 14 days and every other reading is in the future or at least 60 days older. Anything else stays in Needs attention with the readings offered as one-tap choices in Telegram and on the receipt page. Pipeline `receipt-v4`, policy `exception-only-v8-date-candidates`.
+
+## Duplicate buttons on recognized receipts (0.4.7)
+
+Use existing and Keep both did nothing on a receipt that had recognition results. The "What was read" section was appended to the panel with `innerHTML +=`, which rebuilds the panel and drops click handlers attached before it. The duplicate handlers are now attached after the last append, next to the date-choice handlers. `test/recognition-panel.test.mjs` checks this order.
