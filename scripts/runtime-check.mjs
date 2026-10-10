@@ -31,7 +31,7 @@ try{
     }
     throw Error('Local extraction timed out');
   }
-  const ready=await waitReady(first.id);assert.equal(ready.ai.pipeline_version,'receipt-v4');
+  const ready=await waitReady(first.id);assert.equal(ready.ai.pipeline_version,'receipt-v5');
   await stop(worker);
   const second=await upload(Buffer.concat([bytes,Buffer.from('\n% second fictional receipt')]));
   assert.equal(second.ai.status,'queued');

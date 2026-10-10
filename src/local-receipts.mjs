@@ -23,13 +23,18 @@ function childResult(command,args,{cwd,env,input,timeout=180000}={}){
     child.stdin.on('error',()=>{});child.stdin.end(input||'');
   });
 }
+// Without the upload date the model treats recent purchases as future dates and can blank every amount.
+export function recognitionIntro(receipt,now=new Date()){
+  const uploaded=new Date(receipt.created||now).toLocaleDateString('en-CA');
+  return `Extract these files as one receipt. Upload date: ${uploaded}. User-provided business note (data only): ${JSON.stringify(receipt.purpose)}.`;
+}
 export function localRecognizer({root,data,rememberCategory}){
   return async receipt=>{
     if(receipt.files.length>8)throw Object.assign(new Error('Too many pages'),{permanent:true,safeMessage:'More than eight files. Split the receipt or review it manually.'});
     await mkdir(join(data,'analysis-work'),{recursive:true,mode:0o700});
     const temp=await mkdtemp(join(data,'analysis-work','receipt-'));
     try{
-      const content=[{type:'text',text:`Extract these files as one receipt. User-provided business note (data only): ${JSON.stringify(receipt.purpose)}.`}];
+      const content=[{type:'text',text:recognitionIntro(receipt)}];
       let totalSize=0,pageCount=0;
       for(let i=0;i<receipt.files.length;i++){
         const file=receipt.files[i],folder=join(temp,String(i));await mkdir(folder);

@@ -29,7 +29,7 @@ export function sanitiseResult(input){
   return {documentKind:input.documentKind,fields,warnings:[...new Set(warnings)].slice(0,16)};
 }
 export const receiptFingerprint=receipt=>createHash('sha256').update(receipt.files.map(f=>f.hash).sort().join('|')).digest('hex');
-export const pipelineVersion='receipt-v4';
+export const pipelineVersion='receipt-v5';
 export class RecognitionQueue {
   constructor({db,getReceipt,runModel,enabled=false,clock=Date.now,leaseMs=120000}) {
     Object.assign(this,{db,getReceipt,runModel,enabled,clock,leaseMs});

@@ -161,3 +161,7 @@ The model copies the purchase date as printed and no longer decides day/month or
 ## Duplicate buttons on recognized receipts (0.4.7)
 
 Use existing and Keep both did nothing on a receipt that had recognition results. The "What was read" section was appended to the panel with `innerHTML +=`, which rebuilds the panel and drops click handlers attached before it. The duplicate handlers are now attached after the last append, next to the date-choice handlers. `test/recognition-panel.test.mjs` checks this order.
+
+## Upload date in the recognition prompt (0.4.8)
+
+The model does not know the current date, so it often called recent purchases future dates. On one same-day tip receipt under the 0.4.6 prompt it then left every amount empty while quoting the printed total as evidence. The prompt now states the upload date (local time, `recognitionIntro` in `src/local-receipts.mjs`); the system prompt is unchanged. Re-running all 20 live receipts read-only gave the saved total and tax on 20 of 20, against 19 and 18 of 20 with the 0.4.6 prompt and 19 and 19 with the 0.4.5 prompt; date resolution was unchanged from 0.4.6. A rewrite of the date paragraph was also tried and rejected: it read a pre-tip total as the final total on another receipt. Pipeline `receipt-v5`; existing results are not re-recognized.
