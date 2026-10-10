@@ -204,8 +204,21 @@ async function processQueue() {
 }
 const formValues=()=>Object.fromEntries(new FormData($('#receipt-form')));
 const dirty=()=>selected&&JSON.stringify(formValues())!==initialForm;
-function closeDetail() {
-  if(dirty()&&!confirm('Close without saving these detail changes? Your original is already saved.'))return;
+// Native confirm() is suppressed in some in-app browsers: it returns false without showing anything.
+function ask({title,text,action,danger=false}){
+  const dialog=$('#confirm-dialog');
+  $('#confirm-title').textContent=title;$('#confirm-text').textContent=text;
+  $('#confirm-ok').textContent=action;$('#confirm-ok').className='button '+(danger?'danger':'primary');
+  return new Promise(resolve=>{
+    const done=value=>{dialog.onclose=null;dialog.close();resolve(value);};
+    $('#confirm-ok').onclick=()=>done(true);
+    $('#confirm-cancel').onclick=$('#confirm-close').onclick=()=>done(false);
+    dialog.onclose=()=>resolve(false);
+    dialog.showModal();$('#confirm-cancel').focus();
+  });
+}
+async function closeDetail() {
+  if(dirty()&&!await ask({title:'Discard changes?',text:'Close without saving these detail changes? Your original is already saved.',action:'Discard changes'}))return;
   ++detailSequence;$('#receipt-dialog').close();selected=null;history.replaceState(null,'',location.pathname+location.search+(page==='receipts'?'':'#'+page));
 }
 $('#detail-close').onclick=closeDetail;
@@ -297,7 +310,7 @@ async function save(status) {
 $('#trash-open').onclick=()=>{resetFilters();view='trash';showPage('receipts');syncReceiptTabs();$('#list-title').textContent='Trash';refresh();};
 $('#trash-receipt').onclick=async()=>{
  const restoring=Boolean(selected.deleted_at);
- if(!restoring&&!confirm('Move this receipt to Trash? It will be removed from totals and exports. You can restore it from Settings → Trash.'))return;
+ if(!restoring&&!await ask({title:'Move to Trash?',text:'It will be removed from totals and exports. You can restore it from Settings → Trash.',action:'Move to Trash',danger:true}))return;
  $('#trash-receipt').disabled=true;
  try{await api(`/api/receipts/${selected.id}/${restoring?'restore':'trash'}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({version:selected.version})});initialForm=JSON.stringify(formValues());closeDetail();await refresh();notify(restoring?'Receipt restored.':'Moved to Trash. Restore it from Settings → Trash.');}
  catch(error){$('#detail-error').textContent=error.message;$('#detail-error').hidden=false;}

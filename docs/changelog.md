@@ -165,3 +165,7 @@ Use existing and Keep both did nothing on a receipt that had recognition results
 ## Upload date in the recognition prompt (0.4.8)
 
 The model does not know the current date, so it often called recent purchases future dates. On one same-day tip receipt under the 0.4.6 prompt it then left every amount empty while quoting the printed total as evidence. The prompt now states the upload date (local time, `recognitionIntro` in `src/local-receipts.mjs`); the system prompt is unchanged. Re-running all 20 live receipts read-only gave the saved total and tax on 20 of 20, against 19 and 18 of 20 with the 0.4.6 prompt and 19 and 19 with the 0.4.5 prompt; date resolution was unchanged from 0.4.6. A rewrite of the date paragraph was also tried and rejected: it read a pre-tip total as the final total on another receipt. Pipeline `receipt-v5`; existing results are not re-recognized.
+
+## In-app confirmation dialogs (0.4.9)
+
+Move to Trash did nothing in some in-app browsers. The web app asked with the native `confirm()`, which those browsers suppress: it returns false at once and no dialog appears. Move to Trash and closing a receipt with unsaved edits now ask in the app's own dialog (`ask` in `public/app.js`, `#confirm-dialog` in `index.html`). `test/native-dialogs.test.mjs` rejects native confirm, alert and prompt in the web app.
